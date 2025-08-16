@@ -2,11 +2,11 @@ Absolutely—here’s a concise, practical Game Design Document (GDD) tailored f
 
 Working Title
 
-- PolyTower: A Minimal Roguelike Defense
+- Defend the Core: A Hub-Based Survival Defense
 
 High Concept
 
-- Defend a geometric tower against escalating waves of abstract enemies using upgrade choices drafted during runs. Fast sessions, crunchy synergies, readable visuals. No idle/offline progression; all progression is skill- and build-driven with optional meta unlocks earned via in-run achievements.
+- Build and upgrade your core in a persistent hub, then launch into endless survival runs. Permanent upgrades are earned in the hub between runs, while rare boss encounters during runs offer powerful temporary boosts. Clean geometric visuals, meaningful progression, and skill-based gameplay with persistent save system.
 
 Target Platform & Tech
 
@@ -14,21 +14,52 @@ Target Platform & Tech
 - Engine: LÖVE2D (Lua)
 - Display: 16:9 fixed or dynamic scaling; 60 FPS target
 - Input: Keyboard + Mouse (controller optional later)
+- Save System: Local file persistence for settings, resources, and progression
 
 Player Fantasy
 
-- You are an architect of a modular geometric tower—choose how it fires, how it defends, and how it morphs, assembling a build that counters increasingly weird enemy shapes.
+- You are the guardian of a powerful core facility. Between survival runs, you research permanent upgrades and manage resources in your hub. During endless survival runs, you face escalating threats with only rare boss victories offering temporary power boosts.
 
 Core Pillars
 
-- Readable minimalism: clean geometric forms, strong color coding.
-- Meaningful drafts: every upgrade is a clear trade-off or synergy.
-- Tight runs: 10–20 minutes, instant restart, high replayability.
-- No grind: meta is light, optional, and non-power-creeping.
+- Hub-based progression: Permanent upgrades happen between runs in a dedicated hub screen
+- Endless survival: No waves—pure survival until death with escalating difficulty
+- Meaningful persistence: Resources, upgrades, and settings saved between sessions
+- Clean separation: Hub for planning/upgrading, runs for pure action
 
-Game Loop
+Game Flow
 
-- Start → Draft 1 of 3 starter mods → Waves (with periodic draft phases) → Boss every 10 waves → Final challenge at wave 30 (or endless toggle) → Score/achievements → Restart.
+- Main Menu → Hub (manage upgrades, resources, inventory) → Endless Run (survive until death, earn resources) → Return to Hub → Repeat
+- Alternative: Main Menu → Options (dedicated settings screen) → Main Menu
+
+Hub Screen Layout
+
+- Center: Visual representation of your core with energy effects
+- Top Bar: Resource display (Credits, Parts, Cores earned from runs)
+- Bottom Navigation: Three panels
+  - Left: Permanent Upgrades (research tree, unlock with resources)
+  - Middle: Play Mode (start endless run, view stats)
+  - Right: Inventory (items, collectibles, achievements)
+
+Endless Run Structure
+
+- Duration: Unlimited—survive as long as possible
+- Difficulty Scaling: Enemy spawn rate increases over time, more variety at higher survival times
+- Boss Encounters: Every 60-90 seconds, defeating bosses grants one powerful temporary upgrade
+- No Mid-Run Drafts: Pure action gameplay, no upgrade menus during survival
+- Death: Return to hub with earned resources based on survival time
+
+Resource System
+
+- Credits: Primary currency earned based on survival time (1 credit per 10 seconds survived)
+- Parts: Rare materials from boss defeats, used for advanced upgrades
+- Cores: Ultra-rare items from exceptional runs, unlock major progression tiers
+
+Save System
+
+- Automatic save on game exit and after each run
+- Persistent storage of settings, resources, permanent upgrades, and statistics
+- Profile includes best survival time, total runs, enemies defeated, etc.
 
 Combat Overview
 

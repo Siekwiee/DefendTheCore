@@ -14,6 +14,12 @@ _G.Game = {
 
     SETTINGS = {
         language = "en",
+        showFPS = true,
+        audio = {
+            master = 0.8,
+            sfx = 0.9,
+            music = 0.5,
+        }
     },
 
     -- Constants
@@ -31,4 +37,6 @@ _G.Game = {
     StateManager = StateManager(),
     InputManager = InputManager(),
     CallbackManager = CallbackManager(),
+    SaveSystem = nil, -- Will be initialized in main.lua
+    PROFILE = nil, -- Will be loaded from save system
 }

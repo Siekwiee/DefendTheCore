@@ -11,6 +11,16 @@ function StateManager:init()
     self.states = {}
     self.currentState = nil
     self.currentStateName = nil
+    self.inputListenerSetup = false
+end
+
+function StateManager:setupInputListeners()
+    if not self.inputListenerSetup and _G.Game and _G.Game.InputManager then
+        _G.Game.InputManager:addEventListener("keypressed", function(event)
+            self:keypressed(event.key, event.scancode, event.isrepeat)
+        end)
+        self.inputListenerSetup = true
+    end
 end
 
 ---Register a state with the manager
@@ -65,6 +75,9 @@ end
 ---Update the current state
 ---@param dt number Delta time
 function StateManager:update(dt)
+    -- Set up input listeners if not done yet
+    self:setupInputListeners()
+
     if self.currentState and self.currentState.update then
         self.currentState:update(dt)
     end
@@ -85,6 +98,12 @@ function StateManager:update(dt)
         if self.currentState.handleInput then
             self.currentState:handleInput(_G.Game.InputManager)
         end
+    end
+end
+
+function StateManager:keypressed(key, scancode, isrepeat)
+    if self.currentState and self.currentState.keypressed then
+        self.currentState:keypressed(key, scancode, isrepeat)
     end
 end
 

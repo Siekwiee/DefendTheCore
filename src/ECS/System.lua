@@ -20,6 +20,11 @@ function System.new(class, world)
     return self
 end
 
+-- Allow Class(world) construction via __call on subclasses (System is the metatable of subclasses)
+System.__call = function(class_tbl, world)
+    return System.new(class_tbl, world)
+end
+
 -- Set which components are required for entities (ALL must be present)
 function System:requireAll(...)
     self.requiredComponents = {...}
@@ -158,6 +163,15 @@ end
 -- Initialize the system
 function System:init()
     -- Default implementation does nothing
+end
+
+-- Optional hooks for entity add/remove
+function System:onEntityAdded(entity)
+    -- Override in subclass if needed
+end
+
+function System:onEntityRemoved(entity)
+    -- Override in subclass if needed
 end
 
 -- Update the system - process all entities

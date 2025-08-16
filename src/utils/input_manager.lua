@@ -194,10 +194,17 @@ end
 ---@param eventType string The type of event to dispatch
 ---@param eventData table Event data to pass to listeners
 function InputManager:dispatchEvent(eventType, eventData)
-    if not self.listeners[eventType] then return end
-    
-    for _, callback in ipairs(self.listeners[eventType]) do
-        callback(eventData)
+    local list = self.listeners[eventType]
+    if not list then return end
+
+    -- Iterate over a snapshot so listeners added/removed during dispatch
+    -- do not receive the current event (prevents click-through on state switch)
+    local snapshot = {}
+    for i = 1, #list do snapshot[i] = list[i] end
+
+    for i = 1, #snapshot do
+        local callback = snapshot[i]
+        if callback then callback(eventData) end
     end
 end
 
