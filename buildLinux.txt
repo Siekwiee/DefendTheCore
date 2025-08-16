@@ -1,0 +1,2 @@
+git pull
+love-release -D -p "DefendTheCore" -v "1.2.0" -t "DefendTheCore" -a "Siekwie" -d "Defend yourself against lots of enemies" -e "siekwieyt@gmail.com" -u "https://github.com/siekwiee/DefendTheCore"
