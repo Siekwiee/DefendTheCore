@@ -19,6 +19,9 @@ function InventoryState:init()
         buttonPress = {0.10, 0.12, 0.16, 1},
     }
 
+    -- Max equipped items allowed (cap within 8-10 per requirement)
+    self.maxEquipped = 8
+
     self.ui = UIBox({ background = { color = self.colors.bg, drawMode = "fill" } })
     local w, h = love.graphics.getWidth(), love.graphics.getHeight()
     self.ui:resize(w, h)
@@ -90,7 +93,27 @@ function InventoryState:registerCallbacks()
     -- Inventory cell interactions (hover/press/release) for later use
     cm:register("inventory:cellHover", function(element, isHovered)
         if element and element.background then
-            element.background.color = isHovered and {0.18, 0.20, 0.26, 1} or self.colors.cell
+            -- Check if item is equipped to preserve green color
+            local isEquipped = false
+            if element.itemId then
+                local inv = _G.Game.SaveSystem:getInventory()
+                if inv then
+                    for _, item in ipairs(inv) do
+                        if item.id == element.itemId and item.equipped then
+                            isEquipped = true
+                            break
+                        end
+                    end
+                end
+            end
+
+            if isHovered then
+                -- Use different hover colors for equipped vs unequipped items
+                element.background.color = isEquipped and {0.22, 0.35, 0.22, 1} or {0.18, 0.20, 0.26, 1}
+            else
+                -- Restore original color based on equipped state
+                element.background.color = isEquipped and {0.18, 0.28, 0.18, 1} or self.colors.cell
+            end
         end
     end)
     cm:register("inventory:cellPress", function(element)
@@ -98,14 +121,69 @@ function InventoryState:registerCallbacks()
     end)
     cm:register("inventory:cellRelease", function(element)
         if element and element.background then
-            local target = element.isHovered and {0.18, 0.20, 0.26, 1} or self.colors.cell
-            element.background.color = target
+            -- Check if item is equipped to use proper colors
+            local isEquipped = false
+            if element.itemId then
+                local inv = _G.Game.SaveSystem:getInventory()
+                if inv then
+                    for _, item in ipairs(inv) do
+                        if item.id == element.itemId and item.equipped then
+                            isEquipped = true
+                            break
+                        end
+                    end
+                end
+            end
+
+            if element.isHovered then
+                -- Use appropriate hover color based on equipped state
+                element.background.color = isEquipped and {0.22, 0.35, 0.22, 1} or {0.18, 0.20, 0.26, 1}
+            else
+                -- Use appropriate base color based on equipped state
+                element.background.color = isEquipped and {0.18, 0.28, 0.18, 1} or self.colors.cell
+            end
         end
     end)
     cm:register("inventory:cellClick", function(element)
-        -- Placeholder: open item details or equip/unequip when items are present
-        print("Clicked inventory cell: " .. tostring(element and element.elementName))
+        if not element or not element.itemId then return end
+        -- Enforce equip limit and persist
+        local ok, status = _G.Game.SaveSystem:toggleEquip(element.itemId, self.maxEquipped)
+        if ok and _G.Game.PROFILE then _G.Game.SaveSystem:save(_G.Game.PROFILE) end
+        -- Update visuals immediately
+        self:updateCellVisual(element)
+        self:updateEquippedCountLabel()
+        -- Optionally show feedback
+        if status == "LIMIT_REACHED" then print("Equip limit reached") end
     end)
+end
+function InventoryState:updateCellVisual(cell)
+    local inv = _G.Game.SaveSystem:getInventory()
+    if not inv or not cell then return end
+    local item
+    for _, it in ipairs(inv) do if it.id == cell.itemId then item = it break end end
+    if item and item.equipped then
+        cell.background.color = {0.18, 0.28, 0.18, 1}
+        cell.badge = "E"
+    else
+        cell.background.color = self.colors.cell
+        cell.badge = nil
+    end
+    -- Update label text if present
+    if cell.label then
+        cell.label.text = (item and item.name or "")
+        -- Use updateElementProperties to ensure proper text update
+        self.ui:updateElementProperties(cell.label.elementName, "text", cell.label.text)
+    end
+end
+
+-- Update equipped label text helper
+function InventoryState:updateEquippedCountLabel()
+    if not self.eqLabel then return end
+    local eq = _G.Game.SaveSystem:getEquippedCount()
+    local newText = string.format("Equipped: %d / %d", eq, self.maxEquipped)
+    self.eqLabel.text = newText
+    -- Use updateElementProperties to ensure proper text update
+    self.ui:updateElementProperties("inventory_equipped", "text", newText)
 end
 
 function InventoryState:_addCell(name, x, y, w, h)
@@ -128,7 +206,7 @@ end
 function InventoryState:buildLayout(w, h)
     self.ui:clear()
 
-    -- Title
+    -- Title (keep for section clarity, TopBar shows global info)
     self.title = UIElement({
         elementName = "inventory_title",
         x = w * 0.5, y = h * 0.12,
@@ -142,7 +220,7 @@ function InventoryState:buildLayout(w, h)
     })
     self.ui:addElement(self.title)
 
-    -- Inventory panel and cells
+    -- Inventory panel
     local panelW, panelH = math.min(1100, w * 0.9), h * 0.6
     local panelX, panelY = (w - panelW) * 0.5, h * 0.20
     self.panel = UIElement({
@@ -154,16 +232,55 @@ function InventoryState:buildLayout(w, h)
     })
     self.ui:addElement(self.panel)
 
-    -- Build a simple interactive grid of cells as placeholders
+    -- Render items from profile.inventory
+    local inv = _G.Game.SaveSystem:getInventory()
     local cols, rows = 8, 4
     local cellW, cellH = panelW / cols, panelH / rows
     local startX, startY = panelX + cellW/2, panelY + cellH/2
+    local idx = 1
     for r=1,rows do
         for c=1,cols do
             local name = string.format("inv_cell_%d_%d", r, c)
-            self:_addCell(name, startX + (c-1)*cellW, startY + (r-1)*cellH, cellW - 8, cellH - 8)
+            local cell = self:_addCell(name, startX + (c-1)*cellW, startY + (r-1)*cellH, cellW - 8, cellH - 8)
+            local item = inv[idx]
+            if item then
+                cell.itemId = item.id
+                -- Add label inside cell
+                cell.label = UIElement({
+                    elementName = name.."_label",
+                    x = cell.x, y = cell.y,
+                    width = cell.width - 12, height = cell.height - 12,
+                    pivotX = 0.5, pivotY = 0.5,
+                    text = item.name,
+                    fontSize = 16,
+                    textColor = self.colors.text,
+                    background = { color = {0,0,0,0}, drawMode = "none" },
+                    zIndex = 3,
+                    wrap = true,
+                    textAlign = "center",
+                textVAlign = "center",
+            })
+            self.ui:addElement(cell.label)
+            self:updateCellVisual(cell)
         end
+        idx = idx + 1
+      end
     end
+
+    -- Equipped count indicator
+    local eq = _G.Game.SaveSystem:getEquippedCount()
+    self.eqLabel = UIElement({
+        elementName = "inventory_equipped",
+        x = w * 0.5, y = panelY + panelH + 28,
+        width = 300, height = 24,
+        pivotX = 0.5, pivotY = 0.5,
+        text = string.format("Equipped: %d / %d", eq, self.maxEquipped),
+        fontSize = 18,
+        textColor = self.colors.muted,
+        background = { color = {0,0,0,0}, drawMode = "none" },
+        zIndex = 1,
+    })
+    self.ui:addElement(self.eqLabel)
 
     -- Back button
     self.btnBack = UIElement({
@@ -184,9 +301,9 @@ function InventoryState:buildLayout(w, h)
     })
     self.ui:addElement(self.btnBack)
 
-    -- Initial focus
-    for i, e in ipairs(self.ui.elements) do
-        if e.isFocusable then self.ui:setFocusByIndex(i) break end
+    -- Initial focus - use focusableElements array
+    if #self.ui.focusableElements > 0 then
+        self.ui:setFocusByIndex(1)
     end
 end
 
@@ -208,4 +325,3 @@ function InventoryState:layout(w, h)
 end
 
 return InventoryState
-

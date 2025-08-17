@@ -324,6 +324,60 @@ function SaveSystem:hasPermanentUpgrade(upgradeId)
     return false
 end
 
+-- Inventory helpers
+function SaveSystem:getInventory()
+    if _G.Game and _G.Game.PROFILE then
+        _G.Game.PROFILE.player.inventory = _G.Game.PROFILE.player.inventory or {}
+        return _G.Game.PROFILE.player.inventory
+    end
+    return {}
+end
+
+function SaveSystem:getEquippedCount()
+    local inv = self:getInventory()
+    local count = 0
+    for _, item in ipairs(inv) do
+        if item.equipped then count = count + 1 end
+    end
+    return count
+end
+
+function SaveSystem:hasItem(itemId)
+    local inv = self:getInventory()
+    for _, item in ipairs(inv) do
+        if item.id == itemId then return true end
+    end
+    return false
+end
+
+function SaveSystem:addItemById(itemId, name)
+    -- Avoid duplicates: if already exists, do nothing (or extend later with stacks)
+    if self:hasItem(itemId) then return false end
+    local inv = self:getInventory()
+    table.insert(inv, { id = itemId, name = name or itemId, equipped = false })
+    return true
+end
+
+function SaveSystem:toggleEquip(itemId, maxEquipped)
+    local inv = self:getInventory()
+    local equippedCount = self:getEquippedCount()
+    for _, item in ipairs(inv) do
+        if item.id == itemId then
+            if item.equipped then
+                item.equipped = false
+                return true, "UNEQUIPPED"
+            else
+                if equippedCount >= (maxEquipped or 8) then
+                    return false, "LIMIT_REACHED"
+                end
+                item.equipped = true
+                return true, "EQUIPPED"
+            end
+        end
+    end
+    return false, "NOT_FOUND"
+end
+
 ---Delete save file and reset in-memory profile to defaults
 ---@return boolean ok, string|nil err
 function SaveSystem:deleteSave()

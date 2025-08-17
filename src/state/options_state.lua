@@ -147,8 +147,9 @@ function OptionsState:buildLayout(w, h)
     })
     self.ui:addElement(self.btnBack)
 
-    for i, e in ipairs(self.ui.elements) do
-        if e.isFocusable then self.ui:setFocusByIndex(i) break end
+    -- Initial focus - use focusableElements array
+    if #self.ui.focusableElements > 0 then
+        self.ui:setFocusByIndex(1)
     end
 end
 

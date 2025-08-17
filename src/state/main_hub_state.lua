@@ -18,9 +18,11 @@ function GameHubState:init()
         muted = {0.8, 0.85, 0.9, 1},
     }
 
-local TopBar = require("src.ui.top_bar")
-    self.ui = UIBox({ background = { color = self.colors.bg, drawMode = "fill" } })
     local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+    local TopBar = require("src.ui.top_bar")
+    -- Shared top bar for Hub (no back button here)
+    self.topbar = TopBar("Command Hub", "", w, h)
+    self.ui = UIBox({ background = { color = self.colors.bg, drawMode = "fill" } })
     self.ui:resize(w, h)
 
     self:registerCallbacks()
@@ -43,18 +45,12 @@ end
 
 function GameHubState:update(dt)
     if self.ui then self.ui:update(dt) end
-    -- Update dynamic resource text
-    if self.resLabel then
-        local p = _G.Game.PROFILE and _G.Game.PROFILE.player or {}
-        local credits = tostring(p.credits or 0)
-        local parts = tostring(p.parts or 0)
-        local cores = tostring(p.cores or 0)
-        self.resLabel.text = string.format("Resources  •  Credits: %s   Parts: %s   Cores: %s", credits, parts, cores)
-    end
+    if self.topbar then self.topbar:update(dt) end
 end
 
 function GameHubState:draw()
     if self.ui then self.ui:draw() end
+    if self.topbar then self.topbar:draw() end
 end
 
 function GameHubState:resize(w, h)
@@ -62,6 +58,7 @@ function GameHubState:resize(w, h)
         self.ui:resize(w, h)
         self:layout(w, h)
     end
+    if self.topbar then self.topbar:resize(w, h) end
 end
 
 function GameHubState:registerCallbacks()
@@ -131,44 +128,10 @@ end
 function GameHubState:buildLayout(w, h)
     self.ui:clear()
 
-    -- Title
-    self.title = UIElement({
-        elementName = "hub_title",
-        x = w * 0.5, y = h * 0.16,
-        width = math.min(1100, w * 0.9), height = 72,
-        pivotX = 0.5, pivotY = 0.5,
-        text = "Command Hub",
-        fontSize = 48,
-        textColor = self.colors.title,
-        background = { color = {0,0,0,0}, drawMode = "none" },
-        zIndex = 1,
-    })
-    self.ui:addElement(self.title)
-
-    -- Resource bar panel
-    local panelW, panelH = math.min(1100, w * 0.9), 64
-    local panelX, panelY = (w - panelW) * 0.5, h * 0.24
-    self.resPanel = UIElement({
-        elementName = "hub_resources_panel",
-        x = panelX, y = panelY, width = panelW, height = panelH,
-        pivotX = 0, pivotY = 0,
-        background = { color = self.colors.panel, drawMode = "fill" },
-        zIndex = 1,
-    })
-    self.ui:addElement(self.resPanel)
-
-    self.resLabel = UIElement({
-        elementName = "hub_resources_label",
-        x = panelX + 16, y = panelY + panelH/2,
-        width = panelW - 32, height = panelH,
-        pivotX = 0, pivotY = 0.5,
-        text = "",
-        fontSize = 20,
-        textColor = self.colors.subtitle,
-        background = { color = {0,0,0,0}, drawMode = "none" },
-        zIndex = 2,
-    })
-    self.ui:addElement(self.resLabel)
+    -- Title and old resource panel removed; TopBar provides title and resources
+    self.title = nil
+    self.resPanel = nil
+    self.resLabel = nil
 
     -- Primary action buttons (centered column)
     local btnW, btnH = 320, 60
@@ -201,9 +164,9 @@ function GameHubState:buildLayout(w, h)
     })
     self.ui:addElement(self.btnBack)
 
-    -- Initial focus
-    for i, e in ipairs(self.ui.elements) do
-        if e.isFocusable then self.ui:setFocusByIndex(i) break end
+    -- Initial focus - use focusableElements array
+    if #self.ui.focusableElements > 0 then
+        self.ui:setFocusByIndex(1)
     end
 
     -- Force first resource text update
@@ -212,20 +175,8 @@ end
 
 function GameHubState:layout(w, h)
     if not self.ui then return end
-    -- Title
-    if self.title then
-        self.title:setPosition(w * 0.5, h * 0.16)
-        self.title:setSize(math.min(1100, w * 0.9), 72)
-    end
-    -- Resource panel
-    if self.resPanel and self.resLabel then
-        local panelW, panelH = math.min(1100, w * 0.9), 64
-        local panelX, panelY = (w - panelW) * 0.5, h * 0.24
-        self.resPanel:setPosition(panelX, panelY)
-        self.resPanel:setSize(panelW, panelH)
-        self.resLabel:setPosition(panelX + 16, panelY + panelH/2)
-        self.resLabel:setSize(panelW - 32, panelH)
-    end
+    -- Title and resource panel removed (TopBar handles these)
+    -- no-op
     -- Buttons
     if self.btnPlay and self.btnInventory and self.btnUpgrades then
         local btnW, btnH = 320, 60

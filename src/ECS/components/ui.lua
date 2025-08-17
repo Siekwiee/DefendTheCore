@@ -23,9 +23,10 @@ UI = {
 
 ---@class UIBox : Transformable
 ---@field elements UIElement[] List of UI elements managed by this box
+---@field focusableElements UIElement[] List of focusable elements in creation order
 ---@field needsSort boolean Z-index sorting flag
 ---@field inputListeners table Event listener functions that need to be cleaned up
----@field focusedIndex integer? Index of currently focused focusable element
+---@field focusedIndex integer? Index of currently focused focusable element in focusableElements
 ---@field tooltipElement UIElement? Currently active tooltip element
 UIBox = Transformable:extend()
 
@@ -36,6 +37,8 @@ function UIBox:init(properties)
     
     -- List of UI elements managed by this box
     self.elements = {}
+    -- List of focusable elements in creation order (for navigation)
+    self.focusableElements = {}
     -- Z-index sorting for elements
     self.needsSort = false
     -- Track input listeners for cleanup
@@ -111,6 +114,10 @@ end
 
 function UIBox:addElement(element)
     table.insert(self.elements, element)
+    -- Add to focusable elements list if it's focusable
+    if element.isFocusable then
+        table.insert(self.focusableElements, element)
+    end
     self.needsSort = true
 end
 
@@ -121,6 +128,20 @@ function UIBox:removeElement(element)
             break
         end
     end
+    -- Also remove from focusable elements
+    for i, e in ipairs(self.focusableElements) do
+        if e == element then
+            table.remove(self.focusableElements, i)
+            break
+        end
+    end
+end
+
+function UIBox:clear()
+    self.elements = {}
+    self.focusableElements = {}
+    self.focusedIndex = nil
+    self.needsSort = false
 end
 
 -- Sort elements by z-index if needed
@@ -175,7 +196,13 @@ function UIBox:handleMousePressed(x, y, button)
         if element:contains(x, y) and element.isInteractive and element.visible and element.enabled ~= false then
             element:onMousePressed(x, y, button)
             if element.isFocusable then
-                self:setFocusByIndex(i)
+                -- Find the index in focusableElements array
+                for focusIndex, focusElement in ipairs(self.focusableElements) do
+                    if focusElement == element then
+                        self:setFocusByIndex(focusIndex)
+                        break
+                    end
+                end
             end
             break -- Stop at first element that handled the input
         end
@@ -254,11 +281,11 @@ function UIBox:clear()
     self.tooltipElement = nil
 end
 
----Set focus by element index
+---Set focus by element index in focusableElements array
 ---@param index integer
 function UIBox:setFocusByIndex(index)
-    if index < 1 or index > #self.elements then return end
-    local element = self.elements[index]
+    if index < 1 or index > #self.focusableElements then return end
+    local element = self.focusableElements[index]
     if not element or not element.isFocusable or element.visible == false then return end
     local previous = self:getFocusedElement()
     if previous then
@@ -278,16 +305,16 @@ end
 ---@return UIElement|nil
 function UIBox:getFocusedElement()
     if not self.focusedIndex then return nil end
-    return self.elements[self.focusedIndex]
+    return self.focusableElements[self.focusedIndex]
 end
 
 ---Focus the next focusable element
 function UIBox:focusNext()
-    if #self.elements == 0 then return end
+    if #self.focusableElements == 0 then return end
     local start = self.focusedIndex or 0
-    for offset = 1, #self.elements do
-        local i = ((start + offset - 1) % #self.elements) + 1
-        local e = self.elements[i]
+    for offset = 1, #self.focusableElements do
+        local i = ((start + offset - 1) % #self.focusableElements) + 1
+        local e = self.focusableElements[i]
         if e.visible and e.isFocusable and (e.enabled ~= false) then
             self:setFocusByIndex(i)
             return
@@ -297,11 +324,12 @@ end
 
 ---Focus the previous focusable element
 function UIBox:focusPrevious()
-    if #self.elements == 0 then return end
+    if #self.focusableElements == 0 then return end
     local start = self.focusedIndex or 1
-    for offset = 1, #self.elements do
-        local i = ((start - offset - 1) % #self.elements) + 1
-        local e = self.elements[i]
+    for offset = 1, #self.focusableElements do
+        -- Fix negative modulo arithmetic for proper backward navigation
+        local i = ((start - offset - 1 + #self.focusableElements) % #self.focusableElements) + 1
+        local e = self.focusableElements[i]
         if e.visible and e.isFocusable and (e.enabled ~= false) then
             self:setFocusByIndex(i)
             return

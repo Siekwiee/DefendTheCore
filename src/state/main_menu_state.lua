@@ -146,11 +146,8 @@ function MainMenuState:buildLayout(w, h)
     self.btnQuit = self:createButton("Quit", "menu:quit", w * 0.5, h * 0.55 + 140, buttonWidth, buttonHeight, { isFocusable = true, tooltipText = "Exit to desktop" })
 
     -- Set initial keyboard focus to first focusable element
-    for i, e in ipairs(self.ui.elements) do
-        if e.isFocusable then
-            self.ui:setFocusByIndex(i)
-            break
-        end
+    if #self.ui.focusableElements > 0 then
+        self.ui:setFocusByIndex(1)
     end
 end
 
