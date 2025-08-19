@@ -648,3 +648,232 @@ end
 function UIElement:isTooltipReady()
     return self.isHovered and self.tooltipText ~= nil and self.hoverTime >= (self.tooltipDelay or 0)
 end
+
+---@class UIToast : Object
+---@field message string The toast message text
+---@field duration number How long the toast should be visible
+---@field fadeInTime number Time to fade in
+---@field fadeOutTime number Time to fade out
+---@field totalTime number Total time the toast has been alive
+---@field alpha number Current alpha for fade animations
+---@field x number X position
+---@field y number Y position
+---@field width number Toast width
+---@field height number Toast height
+---@field backgroundColor table Background color {r,g,b,a}
+---@field textColor table Text color {r,g,b,a}
+---@field font love.Font Font for the text
+---@field isVisible boolean Whether the toast is currently visible
+UIToast = Object:extend()
+
+function UIToast:init(message, duration, x, y)
+    self.message = message or "Notification"
+    self.duration = duration or 3.0
+    self.fadeInTime = 0.3
+    self.fadeOutTime = 0.5
+    self.totalTime = 0
+    self.alpha = 0
+
+    -- Colors matching the game's style
+    self.backgroundColor = {0.09, 0.10, 0.14, 0.95}
+    self.textColor = {1, 1, 1, 1}
+    self.borderColor = {0.22, 0.25, 0.32, 1}
+
+    -- Font
+    self.font = love.graphics.newFont(16)
+
+    -- Calculate dynamic size based on text content
+    self:calculateSize()
+
+    -- Positioning (default to top-right, adjusted for dynamic width)
+    self.x = x or (love.graphics.getWidth() - self.width - 20)
+    self.y = y or 60
+
+    self.isVisible = true
+end
+
+---Calculate the optimal size for the toast based on text content
+function UIToast:calculateSize()
+    local padding = 24 -- Horizontal padding (12px on each side)
+    local verticalPadding = 16 -- Vertical padding (8px on each side)
+    local maxWidth = love.graphics.getWidth() * 0.4 -- Max 40% of screen width
+    local minWidth = 200 -- Minimum width for consistency
+
+    -- Get text dimensions
+    local textWidth = self.font:getWidth(self.message)
+    local lineHeight = self.font:getHeight()
+
+    -- Calculate width
+    if textWidth + padding <= maxWidth then
+        -- Text fits in one line
+        self.width = math.max(minWidth, textWidth + padding)
+        self.height = lineHeight + verticalPadding
+        self.wrappedText = self.message
+        self.lineCount = 1
+    else
+        -- Text needs to be wrapped
+        self.width = maxWidth
+        local availableWidth = maxWidth - padding
+
+        -- Calculate wrapped text and line count
+        self.wrappedText = self.message
+        local _, wrappedLines = self.font:getWrap(self.message, availableWidth)
+        self.lineCount = #wrappedLines
+        self.height = (lineHeight * self.lineCount) + verticalPadding
+    end
+end
+
+function UIToast:update(dt)
+    if not self.isVisible then return end
+
+    self.totalTime = self.totalTime + dt
+
+    -- Calculate alpha based on fade phases
+    if self.totalTime < self.fadeInTime then
+        -- Fade in
+        self.alpha = self.totalTime / self.fadeInTime
+    elseif self.totalTime < (self.duration - self.fadeOutTime) then
+        -- Fully visible
+        self.alpha = 1.0
+    elseif self.totalTime < self.duration then
+        -- Fade out
+        local fadeProgress = (self.totalTime - (self.duration - self.fadeOutTime)) / self.fadeOutTime
+        self.alpha = 1.0 - fadeProgress
+    else
+        -- Expired
+        self.alpha = 0
+        self.isVisible = false
+    end
+end
+
+function UIToast:draw()
+    if not self.isVisible or self.alpha <= 0 then return end
+
+    -- Save current color
+    local r, g, b, a = love.graphics.getColor()
+    local currentFont = love.graphics.getFont()
+
+    -- Draw background with alpha
+    love.graphics.setColor(
+        self.backgroundColor[1],
+        self.backgroundColor[2],
+        self.backgroundColor[3],
+        self.backgroundColor[4] * self.alpha
+    )
+    love.graphics.rectangle("fill", self.x, self.y, self.width, self.height, 8, 8)
+
+    -- Draw border
+    love.graphics.setColor(
+        self.borderColor[1],
+        self.borderColor[2],
+        self.borderColor[3],
+        self.borderColor[4] * self.alpha
+    )
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", self.x, self.y, self.width, self.height, 8, 8)
+
+    -- Draw text
+    love.graphics.setFont(self.font)
+    love.graphics.setColor(
+        self.textColor[1],
+        self.textColor[2],
+        self.textColor[3],
+        self.textColor[4] * self.alpha
+    )
+
+    -- Position text with proper padding and vertical centering
+    local textX = self.x + 12
+    local lineHeight = self.font:getHeight()
+    local totalTextHeight = lineHeight * self.lineCount
+    local textY = self.y + (self.height - totalTextHeight) / 2
+
+    -- Use printf for proper text wrapping if needed
+    if self.lineCount > 1 then
+        local availableWidth = self.width - 24 -- Account for padding
+        love.graphics.printf(self.wrappedText, textX, textY, availableWidth, "left")
+    else
+        love.graphics.print(self.wrappedText, textX, textY)
+    end
+
+    -- Restore previous state
+    love.graphics.setColor(r, g, b, a)
+    love.graphics.setFont(currentFont)
+    love.graphics.setLineWidth(1)
+end
+
+function UIToast:isExpired()
+    return not self.isVisible
+end
+
+function UIToast:setPosition(x, y)
+    self.x = x
+    self.y = y
+end
+
+---@class UIToastManager : Object
+---@field toasts UIToast[] Queue of active toasts
+---@field spacing number Vertical spacing between toasts
+---@field baseX number Base X position for toasts
+---@field baseY number Base Y position for toasts
+UIToastManager = Object:extend()
+
+function UIToastManager:init()
+    self.toasts = {}
+    self.spacing = 10 -- Reduced spacing since toasts are now variable height
+    self.baseY = 60
+end
+
+function UIToastManager:addToast(message, duration)
+    -- Create toast with temporary position, it will be repositioned
+    local toast = UIToast(message, duration, 0, self.baseY)
+    table.insert(self.toasts, toast)
+    self:repositionToasts()
+    return toast
+end
+
+function UIToastManager:update(dt)
+    -- Update all toasts
+    for i = #self.toasts, 1, -1 do
+        local toast = self.toasts[i]
+        toast:update(dt)
+
+        -- Remove expired toasts
+        if toast:isExpired() then
+            table.remove(self.toasts, i)
+        end
+    end
+
+    -- Reposition remaining toasts
+    self:repositionToasts()
+end
+
+function UIToastManager:repositionToasts()
+    local currentY = self.baseY
+
+    for i, toast in ipairs(self.toasts) do
+        -- Position each toast at the right edge, accounting for its width
+        local targetX = love.graphics.getWidth() - toast.width - 20
+        toast:setPosition(targetX, currentY)
+
+        -- Move down by this toast's height plus spacing for the next toast
+        currentY = currentY + toast.height + self.spacing
+    end
+end
+
+function UIToastManager:draw()
+    for _, toast in ipairs(self.toasts) do
+        toast:draw()
+    end
+end
+
+function UIToastManager:clear()
+    self.toasts = {}
+end
+
+function UIToastManager:resize(width, height)
+    -- Recalculate sizes for all existing toasts in case screen size affects max width
+    for _, toast in ipairs(self.toasts) do
+        toast:calculateSize()
+    end
+    self:repositionToasts()
+end

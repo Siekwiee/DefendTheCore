@@ -28,11 +28,8 @@ function SaveSystem:init()
             -- Permanent upgrades unlocked in hub
             permanentUpgrades = {},
             
-            -- Inventory items
-            inventory = {
-                { id = "mod_speed", name = "Speed Mod", equipped = false },
-                { id = "mod_damage", name = "Damage Mod", equipped = true },
-            },
+            -- Inventory items (start with empty inventory)
+            inventory = {},
 
             -- Statistics
             stats = {
@@ -285,6 +282,18 @@ end
 function SaveSystem:addCredits(amount)
     if _G.Game and _G.Game.PROFILE then
         _G.Game.PROFILE.player.credits = (_G.Game.PROFILE.player.credits or 0) + amount
+    end
+end
+
+function SaveSystem:addParts(amount)
+    if _G.Game and _G.Game.PROFILE then
+        _G.Game.PROFILE.player.parts = (_G.Game.PROFILE.player.parts or 0) + amount
+    end
+end
+
+function SaveSystem:addCores(amount)
+    if _G.Game and _G.Game.PROFILE then
+        _G.Game.PROFILE.player.cores = (_G.Game.PROFILE.player.cores or 0) + amount
     end
 end
 

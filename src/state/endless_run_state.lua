@@ -1,5 +1,6 @@
 require "src.ECS.components.ui"
 require "src.ECS.components.transformable"
+local ResourceSpawner = require "src.systems.resource_spawner"
 
 ---@class EndlessGameState : Object
 local EndlessGameState = Object:extend()
@@ -28,7 +29,7 @@ end
 
 function EndlessGameState:resetRun()
     local w,h = love.graphics.getWidth(), love.graphics.getHeight()
-    self.player = { x=w*0.5, y=h*0.5, r=12, speed=240, maxHp=100, hp=100, shootCd=0.18, shootT=0 }
+    self.player = { x=w*0.5, y=h*0.5, r=12, speed=240, baseSpeed=240, maxHp=100, hp=100, shootCd=0.18, shootT=0 }
     self.bulletDamage = 1
     self.bullets, self.enemies = {}, {}
     -- Wave/difficulty state
@@ -39,6 +40,22 @@ function EndlessGameState:resetRun()
     -- Auto-fire/auto-aim upgrade flags (refreshed on enter)
     self.autoFireActive = _G.Game.SaveSystem and _G.Game.SaveSystem:hasPermanentUpgrade("auto_fire") or false
     self.autoAimActive  = _G.Game.SaveSystem and _G.Game.SaveSystem:hasPermanentUpgrade("auto_aim")  or false
+
+    -- Note: Upgrades are only available in the command hub, not during endless runs
+
+    -- Initialize weapon system (simplified for this state)
+    self.weaponStats = {
+        damage = 1,
+        fireRate = 1.0,
+        projectileSpeed = 420
+    }
+
+    -- Initialize resource spawner
+    self.resourceSpawner = ResourceSpawner()
+    self.resourceSpawner:clear()
+
+    -- Initialize toast manager
+    self.toastManager = UIToastManager()
 end
 
 function EndlessGameState:getDifficulty()
@@ -81,6 +98,8 @@ local function findNearestEnemy(enemies, px, py)
     return best
 end
 
+
+
 function EndlessGameState:update(dt)
     if self.ui then self.ui:update(dt) end
     if self.gameOver then
@@ -100,13 +119,22 @@ function EndlessGameState:update(dt)
         self.lastW, self.lastH = w, h
     end
 
-    -- Movement
+    -- Movement (apply movement speed upgrades)
     local dx,dy=0,0
     if im:isKeyDown("w") or im:isKeyDown("up") then dy=dy-1 end
     if im:isKeyDown("s") or im:isKeyDown("down") then dy=dy+1 end
     if im:isKeyDown("a") or im:isKeyDown("left") then dx=dx-1 end
     if im:isKeyDown("d") or im:isKeyDown("right") then dx=dx+1 end
     if dx~=0 or dy~=0 then local len=math.sqrt(dx*dx+dy*dy); dx,dy=dx/len,dy/len end
+
+    -- Calculate current speed with upgrades
+    local currentSpeed = self.player.baseSpeed
+    if self.upgradeSystem then
+        local speedStacks = self.upgradeSystem.upgradeStacks["movement_speed"] or 0
+        currentSpeed = currentSpeed * (1.15 ^ speedStacks) -- 15% per stack, multiplicative
+    end
+    self.player.speed = currentSpeed
+
     self.player.x = clamp(self.player.x + dx*self.player.speed*dt, self.player.r, w-self.player.r)
     self.player.y = clamp(self.player.y + dy*self.player.speed*dt, self.player.r, h-self.player.r)
 
@@ -121,9 +149,24 @@ function EndlessGameState:update(dt)
             if tgt then ang = math.atan2(tgt.y - self.player.y, tgt.x - self.player.x) end
         end
         if not ang then ang = math.atan2(my - self.player.y, mx - self.player.x) end
-        local spd = 420
-        table.insert(self.bullets, {x=self.player.x, y=self.player.y, vx=math.cos(ang)*spd, vy=math.sin(ang)*spd, r=4, dmg=self.bulletDamage})
-        self.player.shootT = self.player.shootCd
+
+        -- Apply weapon upgrades
+        local currentDamage = self.weaponStats.damage
+        local currentProjectileSpeed = self.weaponStats.projectileSpeed
+        local currentFireRate = self.weaponStats.fireRate
+
+        if self.upgradeSystem then
+            local damageStacks = self.upgradeSystem.upgradeStacks["damage_boost"] or 0
+            local speedStacks = self.upgradeSystem.upgradeStacks["projectile_speed"] or 0
+            local fireRateStacks = self.upgradeSystem.upgradeStacks["fire_rate"] or 0
+
+            currentDamage = currentDamage + damageStacks -- +1 damage per stack
+            currentProjectileSpeed = currentProjectileSpeed * (1.2 ^ speedStacks) -- 20% per stack
+            currentFireRate = currentFireRate * (1.15 ^ fireRateStacks) -- 15% per stack
+        end
+
+        table.insert(self.bullets, {x=self.player.x, y=self.player.y, vx=math.cos(ang)*currentProjectileSpeed, vy=math.sin(ang)*currentProjectileSpeed, r=4, dmg=currentDamage})
+        self.player.shootT = self.player.shootCd / currentFireRate
     end
 
     -- Wave progression
@@ -180,7 +223,12 @@ function EndlessGameState:update(dt)
                 if e.hp <= 0 then removeEnemy=true; break end
             end
         end
-        if removeEnemy then table.remove(self.enemies,ei) goto continue end
+        if removeEnemy then
+            -- Handle enemy death drops via ResourceSpawner
+            self.resourceSpawner:handleEnemyDeath(e.x, e.y, self.player.hp, self.player.maxHp)
+            table.remove(self.enemies,ei)
+            goto continue
+        end
         -- Player hit
         if dist2(e.x,e.y,self.player.x,self.player.y) < (e.r+self.player.r)*(e.r+self.player.r) then
             self.player.hp = self.player.hp - (e.dmg or 10); table.remove(self.enemies,ei)
@@ -193,6 +241,46 @@ function EndlessGameState:update(dt)
         end
         ::continue::
     end
+
+    -- Update resource spawner
+    self.resourceSpawner:update(dt, self.player.hp, self.player.maxHp)
+
+    -- Check for core spawn
+    if self.resourceSpawner:checkCoreSpawn() then
+        local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+        local x, y = self.resourceSpawner:findSafeSpawnPosition(self.player.x, self.player.y, w, h)
+        self.resourceSpawner:spawnItem("cores", x, y)
+    end
+
+    -- Check for brown box timed spawn
+    if self.resourceSpawner:checkBrownBoxSpawn() then
+        local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+        local x, y = self.resourceSpawner:findSafeSpawnPosition(self.player.x, self.player.y, w, h)
+        self.resourceSpawner:spawnItem("brown_box", x, y)
+        -- Show notification for timed brown box spawn
+        self.toastManager:addToast("A mysterious brown box appeared!", 4.0)
+    end
+
+    -- Check item collection
+    local collectedItems = self.resourceSpawner:checkItemCollision(self.player.x, self.player.y, self.player.r)
+    for _, item in ipairs(collectedItems) do
+        local result = self.resourceSpawner:collectItem(item)
+        if result.success then
+            -- Show toast notification instead of print
+            self.toastManager:addToast(result.message, 3.0)
+            -- Handle health restoration
+            if result.healthRestore then
+                self.player.hp = math.min(self.player.maxHp, self.player.hp + result.healthRestore)
+            end
+        end
+    end
+
+    -- Update toast manager
+    self.toastManager:update(dt)
+
+    -- No upgrade UI in endless mode
+
+    -- Upgrades are only available in the command hub, not during endless runs
 
     -- Timer
     self.timeSurvived = self.timeSurvived + dt
@@ -207,6 +295,11 @@ function EndlessGameState:draw()
     for _,b in ipairs(self.bullets) do love.graphics.circle("fill", b.x, b.y, b.r) end
     -- Enemies (colored per type)
     for _,e in ipairs(self.enemies) do love.graphics.setColor(e.color); love.graphics.circle("fill", e.x, e.y, e.r) end
+    -- Items (draw before player so player appears on top)
+    if self.resourceSpawner then
+        self.resourceSpawner:draw()
+    end
+
     -- Player
     love.graphics.setColor(0.4,1,0.6,1)
     love.graphics.circle("fill", self.player.x, self.player.y, self.player.r)
@@ -238,11 +331,20 @@ function EndlessGameState:draw()
 
     -- Overlay UI (Exit button)
     if self.ui then self.ui:draw() end
+
+    -- Toast notifications (draw on top of everything)
+    if self.toastManager then
+        self.toastManager:draw()
+    end
+
+    -- No upgrade UI in endless mode - upgrades are only available in the command hub
+
     love.graphics.setColor(1,1,1,1)
 end
 
 function EndlessGameState:resize(w, h)
     if self.ui then self.ui:resize(w,h); self:layout(w,h) end
+    if self.toastManager then self.toastManager:resize(w, h) end
     -- Preserve relative position across resize, then clamp
     local prevW, prevH = self.lastW or w, self.lastH or h
     local fx = (prevW > 0) and (self.player.x / prevW) or 0.5
@@ -270,12 +372,17 @@ function EndlessGameState:buildLayout(w, h)
         hoverCallbackName="endless:buttonHover", pressCallbackName="endless:buttonPress", releaseCallbackName="endless:buttonRelease",
         zIndex=2, isFocusable=true })
     self.ui:addElement(self.btnBack)
-    for i,e in ipairs(self.ui.elements) do if e.isFocusable then self.ui:setFocusByIndex(i) break end end
+    -- Initial focus - use focusableElements array
+    if #self.ui.focusableElements > 0 then
+        self.ui:setFocusByIndex(1)
+    end
 end
 
 function EndlessGameState:layout(w, h)
     if self.btnBack then self.btnBack:setPosition(24, h-24); self.btnBack:setSize(220, 42) end
 end
+
+-- Upgrades are only available in the command hub, not during endless runs
 
 return EndlessGameState
 

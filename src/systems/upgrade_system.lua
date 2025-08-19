@@ -4,9 +4,21 @@ UpgradeSystem = Object:extend()
 function UpgradeSystem:init()
     -- Track active upgrades and synergies
     self.activeUpgrades = {}
+    self.upgradeStacks = {} -- Track how many times each stackable upgrade has been taken
     self.synergies = {}
     self.tags = {}  -- For synergy tracking
-    
+
+    -- Maximum stacks allowed for stackable upgrades
+    self.maxStacks = 5
+
+    -- Define which upgrades are stackable
+    self.stackableUpgrades = {
+        "damage_boost",
+        "fire_rate",
+        "projectile_speed",
+        "movement_speed" -- Add movement speed to stackable list
+    }
+
     -- Upgrade definitions from GDD
     self.upgrades = {
         -- Basic stat upgrades
@@ -29,9 +41,20 @@ function UpgradeSystem:init()
         projectile_speed = {
             name = "+Projectile Speed",
             desc = "Shots travel 20% faster.",
-            rarity = "common", 
+            rarity = "common",
             tags = {},
             apply = function(weapon) weapon.projectileSpeed = weapon.projectileSpeed * 1.2 end
+        },
+
+        movement_speed = {
+            name = "+Movement Speed",
+            desc = "Move 15% faster.",
+            rarity = "common",
+            tags = {},
+            apply = function(weapon)
+                -- This will be applied to player in the run state
+                -- For now, just mark it as taken
+            end
         },
         
         -- Weapon form changes
@@ -219,12 +242,33 @@ function UpgradeSystem:generateUpgradeChoices(count, playerLevel)
     while offered < count and i <= #availableUpgrades do
         local choice = availableUpgrades[i]
         if not pickedIds[choice.id] then
+            -- Check if this is a stackable upgrade and add stack info
+            local isStackable = false
+            for _, stackableId in ipairs(self.stackableUpgrades) do
+                if choice.id == stackableId then
+                    isStackable = true
+                    break
+                end
+            end
+
+            local displayName = choice.upgrade.name
+            local displayDesc = choice.upgrade.desc
+
+            if isStackable then
+                local currentStacks = self.upgradeStacks[choice.id] or 0
+                displayName = choice.upgrade.name .. " (" .. (currentStacks + 1) .. "/" .. self.maxStacks .. ")"
+                if currentStacks > 0 then
+                    displayDesc = choice.upgrade.desc .. " [Stack " .. (currentStacks + 1) .. "]"
+                end
+            end
+
             table.insert(choices, {
                 id = choice.id,
-                name = choice.upgrade.name,
-                desc = choice.upgrade.desc,
+                name = displayName,
+                desc = displayDesc,
                 rarity = choice.upgrade.rarity,
-                tags = choice.upgrade.tags
+                tags = choice.upgrade.tags,
+                stackCount = isStackable and (self.upgradeStacks[choice.id] or 0) or nil
             })
             pickedIds[choice.id] = true
             offered = offered + 1
@@ -232,15 +276,32 @@ function UpgradeSystem:generateUpgradeChoices(count, playerLevel)
         i = i + 1
     end
 
-    -- If we still don't have enough (due to very small pools), fill with basic upgrades but ensure no duplicates in same draft
-    local basicUpgrades = {"damage_boost", "fire_rate", "projectile_speed"}
+    -- If we still don't have enough (due to very small pools), fill with stackable upgrades but ensure no duplicates in same draft
     while offered < count do
-        local id = basicUpgrades[love.math.random(1, #basicUpgrades)]
+        local id = self.stackableUpgrades[love.math.random(1, #self.stackableUpgrades)]
         if not pickedIds[id] then
             local upgrade = self.upgrades[id]
-            table.insert(choices, { id = id, name = upgrade.name, desc = upgrade.desc, rarity = upgrade.rarity, tags = upgrade.tags })
-            pickedIds[id] = true
-            offered = offered + 1
+            local currentStacks = self.upgradeStacks[id] or 0
+
+            -- Only offer if not at max stacks
+            if currentStacks < self.maxStacks then
+                local displayName = upgrade.name .. " (" .. (currentStacks + 1) .. "/" .. self.maxStacks .. ")"
+                local displayDesc = upgrade.desc
+                if currentStacks > 0 then
+                    displayDesc = upgrade.desc .. " [Stack " .. (currentStacks + 1) .. "]"
+                end
+
+                table.insert(choices, {
+                    id = id,
+                    name = displayName,
+                    desc = displayDesc,
+                    rarity = upgrade.rarity,
+                    tags = upgrade.tags,
+                    stackCount = currentStacks
+                })
+                pickedIds[id] = true
+                offered = offered + 1
+            end
         end
     end
 
@@ -248,19 +309,26 @@ function UpgradeSystem:generateUpgradeChoices(count, playerLevel)
 end
 
 function UpgradeSystem:canTakeUpgrade(id, upgrade)
-    -- Allow basic upgrades to be taken multiple times
-    local basicUpgrades = {"damage_boost", "fire_rate", "projectile_speed"}
-    local isBasic = false
-    for _, basicId in ipairs(basicUpgrades) do
-        if id == basicId then
-            isBasic = true
+    -- Check if this upgrade is stackable
+    local isStackable = false
+    for _, stackableId in ipairs(self.stackableUpgrades) do
+        if id == stackableId then
+            isStackable = true
             break
         end
     end
 
-    -- Check if already taken (only for non-basic upgrades)
-    if not isBasic and self.activeUpgrades[id] then
-        return false
+    if isStackable then
+        -- Check if we've reached the stack limit
+        local currentStacks = self.upgradeStacks[id] or 0
+        if currentStacks >= self.maxStacks then
+            return false
+        end
+    else
+        -- Check if already taken (only for non-stackable upgrades)
+        if self.activeUpgrades[id] then
+            return false
+        end
     end
 
     -- Check requirements
@@ -299,23 +367,37 @@ end
 function UpgradeSystem:applyUpgrade(upgradeId, weaponSystem)
     local upgrade = self.upgrades[upgradeId]
     if not upgrade then return false end
-    
-    -- Mark as taken
-    self.activeUpgrades[upgradeId] = true
-    
+
+    -- Check if this upgrade is stackable
+    local isStackable = false
+    for _, stackableId in ipairs(self.stackableUpgrades) do
+        if upgradeId == stackableId then
+            isStackable = true
+            break
+        end
+    end
+
+    if isStackable then
+        -- Increment stack count
+        self.upgradeStacks[upgradeId] = (self.upgradeStacks[upgradeId] or 0) + 1
+    else
+        -- Mark as taken for non-stackable upgrades
+        self.activeUpgrades[upgradeId] = true
+    end
+
     -- Add tags
     for _, tag in ipairs(upgrade.tags) do
         self.tags[tag] = (self.tags[tag] or 0) + 1
     end
-    
+
     -- Apply the upgrade
     if upgrade.apply and weaponSystem then
         upgrade.apply(weaponSystem.weapon)
     end
-    
+
     -- Check for new synergies
     self:checkSynergies(weaponSystem)
-    
+
     return true
 end
 
@@ -376,6 +458,7 @@ end
 -- Reset for new run
 function UpgradeSystem:reset()
     self.activeUpgrades = {}
+    self.upgradeStacks = {} -- Reset stacks for new run
     self.synergies = {}
     self.tags = {}
 end
