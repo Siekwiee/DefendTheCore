@@ -36,7 +36,7 @@ _G.Game = {
     -- Initialize managers
     StateManager = StateManager(),
     InputManager = InputManager(),
-    CallbackManager = CallbackManager(),
+    CallbackManager = CallbackManager({ debug = true }),
     SaveSystem = nil, -- Will be initialized in main.lua
     PROFILE = nil, -- Will be loaded from save system
 }

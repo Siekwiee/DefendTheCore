@@ -1,12 +1,28 @@
----@class ShaderManager : Object
-ShaderManager = Object:extend()
+local BaseManager = require "src.managers.base_manager"
 
-function ShaderManager:init()
+---@class ShaderManager : BaseManager
+---@field shaders table<string, love.Shader> Loaded shaders
+---@field effects table Active shader effects
+---@field time number Current time for animations
+---@field currentShader love.Shader? Currently active shader
+ShaderManager = BaseManager:extend()
+
+function ShaderManager:init(config)
+    config = config or {}
+    config.debug = config.debug or false
+
+    BaseManager:init("ShaderManager", config)
+
+    -- Shader management
     self.shaders = {}
     self.effects = {}
     self.time = 0
-    
-    -- Load shaders
+    self.currentShader = nil
+end
+
+function ShaderManager:initialize()
+    BaseManager.initialize(self)
+    -- Load shaders after base initialization
     self:loadShaders()
 end
 
@@ -101,15 +117,21 @@ function ShaderManager:loadShaders()
 end
 
 function ShaderManager:update(dt)
+    if not self:isActive() then return end
+
     self.time = self.time + dt
-    
+
     -- Update active effects
     for i = #self.effects, 1, -1 do
         local effect = self.effects[i]
-        effect.duration = effect.duration - dt
-        
-        if effect.duration <= 0 then
-            table.remove(self.effects, i)
+        if effect and effect.duration then
+            effect.duration = effect.duration - dt
+
+            if effect.duration <= 0 then
+                table.remove(self.effects, i)
+                if self.config.debug then
+                    print(string.format("[ShaderManager] Effect expired: %s", effect.type or "unknown"))
+                end
         else
             -- Update effect properties
             if effect.type == "flash" then
@@ -173,9 +195,11 @@ end
 
 -- Get active effects of a specific type
 function ShaderManager:getEffects(effectType)
+    if not self:isActive() then return {} end
+
     local results = {}
     for _, effect in ipairs(self.effects) do
-        if effect.type == effectType then
+        if effect and effect.type == effectType then
             table.insert(results, effect)
         end
     end
@@ -206,6 +230,58 @@ function ShaderManager:screenShake(intensity, duration)
     self:addEffect("shake", duration or 0.3, {
         intensity = intensity or 0.5
     })
+end
+
+---Get shader manager statistics
+---@return table stats Shader manager statistics
+function ShaderManager:getStats()
+    local shaderCount = 0
+    for _ in pairs(self.shaders) do shaderCount = shaderCount + 1 end
+
+    return {
+        shaderCount = shaderCount,
+        activeEffects = #self.effects,
+        currentTime = self.time,
+        hasCurrentShader = self.currentShader ~= nil,
+        enabled = self.isEnabled,
+        initialized = self.initialized
+    }
+end
+
+---Clear all active effects
+---@return boolean success Whether clearing was successful
+function ShaderManager:clearAllEffects()
+    if not self:isActive() then
+        self:logError("Cannot clear effects: ShaderManager is not active", "warning")
+        return false
+    end
+
+    local count = #self.effects
+    self.effects = {}
+    self:clearShader()
+
+    if self.config.debug then
+        print(string.format("[ShaderManager] Cleared %d effects", count))
+    end
+
+    return true
+end
+
+---Check if a specific shader is available
+---@param shaderName string Name of the shader to check
+---@return boolean available Whether the shader is available
+function ShaderManager:hasShader(shaderName)
+    return self.shaders[shaderName] ~= nil
+end
+
+---Get list of available shader names
+---@return table<string> shaderNames List of available shader names
+function ShaderManager:getShaderNames()
+    local names = {}
+    for name, _ in pairs(self.shaders) do
+        table.insert(names, name)
+    end
+    return names
 end
 
 return ShaderManager

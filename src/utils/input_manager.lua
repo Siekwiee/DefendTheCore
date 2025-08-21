@@ -1,4 +1,6 @@
----@class InputManager : Object
+local BaseManager = require "src.managers.base_manager"
+
+---@class InputManager : BaseManager
 ---@field keys table<string, boolean> Current key states
 ---@field keysPressed table<string, boolean> Keys pressed this frame
 ---@field keysReleased table<string, boolean> Keys released this frame
@@ -10,31 +12,31 @@
 ---@field mouseButtonsPressed table<number, boolean> Mouse buttons pressed this frame
 ---@field mouseButtonsReleased table<number, boolean> Mouse buttons released this frame
 ---@field listeners table<string, function[]> Event listeners
-InputManager = Object:extend()
+InputManager = BaseManager:extend()
 
 ---Initialize the input manager
-function InputManager:init()
-    -- Keyboard state
-    self.keys = {}
-    self.keysPressed = {}
-    self.keysReleased = {}
-    
-    -- Mouse state
+function InputManager:init(config)
+    config = config or {}
+    config.debug = config.debug or false
+
+    BaseManager:init("InputManager", config)
+
+    -- Ensure all state tables are initialized
+    self.keys = self.keys or {}
+    self.keysPressed = self.keysPressed or {}
+    self.keysReleased = self.keysReleased or {}
+    self.mouseButtons = self.mouseButtons or {}
+    self.mouseButtonsPressed = self.mouseButtonsPressed or {}
+    self.mouseButtonsReleased = self.mouseButtonsReleased or {}
+    self.listeners = self.listeners or {}
     self.mouseX = 0
     self.mouseY = 0
-    self.mouseDeltaX = 0
-    self.mouseDeltaY = 0
-    self.mouseButtons = {}
-    self.mouseButtonsPressed = {}
-    self.mouseButtonsReleased = {}
-    
-    -- Event listeners
-    self.listeners = {}
 end
 
 ---Update the input manager (call this every frame)
 ---@param dt number Delta time
 function InputManager:update(dt)
+    if not self:isActive() then return end
     -- Update mouse position and calculate delta
     local newMouseX, newMouseY = love.mouse.getPosition()
     self.mouseDeltaX = newMouseX - self.mouseX
@@ -250,4 +252,76 @@ function InputManager:getPressedMouseButtons()
         end
     end
     return pressed
+end
+
+---Handle screen resize
+---@param w number New screen width
+---@param h number New screen height
+function InputManager:resize(w, h)
+    if not self:isActive() then return end
+
+    -- Update mouse position bounds if needed
+    self.mouseX = math.min(self.mouseX, w)
+    self.mouseY = math.min(self.mouseY, h)
+
+    if self.config.debug then
+        print(string.format("[InputManager] Screen resized to %dx%d", w, h))
+    end
+end
+
+---Get current input statistics
+---@return table stats Input manager statistics
+function InputManager:getStats()
+    local keyCount = 0
+    for _ in pairs(self.keys) do keyCount = keyCount + 1 end
+
+    local listenerCount = 0
+    for _, listeners in pairs(self.listeners) do
+        listenerCount = listenerCount + #listeners
+    end
+
+    return {
+        activeKeys = keyCount,
+        mouseX = self.mouseX,
+        mouseY = self.mouseY,
+        mouseDeltaX = self.mouseDeltaX,
+        mouseDeltaY = self.mouseDeltaY,
+        listenerCount = listenerCount,
+        enabled = self.isEnabled,
+        initialized = self.initialized
+    }
+end
+
+---Check if any input is active
+---@return boolean hasInput Whether any input is currently active
+function InputManager:hasActiveInput()
+    -- Check for active keys
+    for _, pressed in pairs(self.keys) do
+        if pressed then return true end
+    end
+
+    -- Check for active mouse buttons
+    for _, pressed in pairs(self.mouseButtons) do
+        if pressed then return true end
+    end
+
+    return false
+end
+
+---Clear all input states
+function InputManager:clearAllInput()
+    if not self:isActive() then return end
+
+    self.keys = {}
+    self.keysPressed = {}
+    self.keysReleased = {}
+    self.mouseButtons = {}
+    self.mouseButtonsPressed = {}
+    self.mouseButtonsReleased = {}
+    self.mouseDeltaX = 0
+    self.mouseDeltaY = 0
+
+    if self.config.debug then
+        print("[InputManager] Cleared all input states")
+    end
 end 

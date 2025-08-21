@@ -1,9 +1,20 @@
----@class BackgroundSystem : Object
-BackgroundSystem = Object:extend()
+local BaseManager = require "src.managers.base_manager"
 
-function BackgroundSystem:init()
+---@class BackgroundSystem : BaseManager
+---@field time number Animation time
+---@field gridSize number Grid size for background elements
+---@field stars table Background stars
+---@field nebulaClouds table Nebula cloud data
+BackgroundSystem = BaseManager:extend()
+
+function BackgroundSystem:init(config)
+    config = config or {}
+    config.debug = config.debug or false
+
+    BaseManager:init("BackgroundSystem", config)
+
     self.time = 0
-    self.gridSize = 40
+    self.gridSize = self:getConfig("gridSize", 40)
     self.stars = {}
     self.nebulaClouds = {}
     

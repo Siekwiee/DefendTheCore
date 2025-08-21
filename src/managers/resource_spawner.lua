@@ -1,13 +1,31 @@
----@class ResourceSpawner : Object
-ResourceSpawner = Object:extend()
+local BaseManager = require "src.managers.base_manager"
 
-function ResourceSpawner:init()
-    self.items = {}
+---@class ResourceSpawner : BaseManager
+---@field items table Active spawned items
+---@field coreSpawnTimer number Timer for core spawns
+---@field coreSpawnInterval number Interval between core spawns
+---@field brownBoxSpawnTimer number Timer for brown box spawns
+---@field brownBoxSpawnInterval number Interval between brown box spawns
+---@field itemTypes table Definitions for different item types
+ResourceSpawner = BaseManager:extend()
+
+function ResourceSpawner:init(config)
+    config = config or {}
+    config.debug = config.debug or false
+
+    BaseManager:init("ResourceSpawner", config)
+
+    -- Core spawning configuration
     self.coreSpawnTimer = 0
-    self.coreSpawnInterval = 75 -- Initial core spawn interval
+    self.coreSpawnInterval = self:getConfig("coreSpawnInterval", 75)
     self.brownBoxSpawnTimer = 0
-    self.brownBoxSpawnInterval = 150 -- Brown box spawns every 150 seconds
-    
+    self.brownBoxSpawnInterval = self:getConfig("brownBoxSpawnInterval", 150)
+
+    -- Initialize default item types and settings
+    self:setupDefaults()
+end
+
+function ResourceSpawner:setupDefaults()
     -- Item type definitions
     self.itemTypes = {
         credits = {
@@ -93,6 +111,13 @@ function ResourceSpawner:init()
 end
 
 function ResourceSpawner:update(dt, playerHealth, playerMaxHealth)
+    if not self:isActive() then return end
+
+    if not playerHealth or not playerMaxHealth then
+        self:logError("Player health parameters are required", "warning")
+        return
+    end
+
     -- Update core spawn timer
     self.coreSpawnTimer = self.coreSpawnTimer + dt
 
@@ -384,6 +409,56 @@ end
 
 function ResourceSpawner:getDuplicateDirectItemCreditValue()
     return self.duplicateDirectItemCreditValue
+end
+
+---Get resource spawner statistics
+---@return table stats Spawner statistics
+function ResourceSpawner:getStats()
+    local itemCounts = {}
+    for _, item in ipairs(self.items) do
+        itemCounts[item.type] = (itemCounts[item.type] or 0) + 1
+    end
+
+    return {
+        totalItems = #self.items,
+        itemCounts = itemCounts,
+        coreSpawnTimer = self.coreSpawnTimer,
+        coreSpawnInterval = self.coreSpawnInterval,
+        brownBoxSpawnTimer = self.brownBoxSpawnTimer,
+        brownBoxSpawnInterval = self.brownBoxSpawnInterval,
+        enabled = self.isEnabled,
+        initialized = self.initialized
+    }
+end
+
+---Set core spawn interval
+---@param interval number New spawn interval in seconds
+---@return boolean success Whether setting was successful
+function ResourceSpawner:setCoreSpawnInterval(interval)
+    if interval <= 0 then
+        self:logError("Core spawn interval must be positive", "warning")
+        return false
+    end
+    self.coreSpawnInterval = interval
+    if self.config.debug then
+        print(string.format("[ResourceSpawner] Core spawn interval set to %.1f seconds", interval))
+    end
+    return true
+end
+
+---Set brown box spawn interval
+---@param interval number New spawn interval in seconds
+---@return boolean success Whether setting was successful
+function ResourceSpawner:setBrownBoxSpawnInterval(interval)
+    if interval <= 0 then
+        self:logError("Brown box spawn interval must be positive", "warning")
+        return false
+    end
+    self.brownBoxSpawnInterval = interval
+    if self.config.debug then
+        print(string.format("[ResourceSpawner] Brown box spawn interval set to %.1f seconds", interval))
+    end
+    return true
 end
 
 return ResourceSpawner

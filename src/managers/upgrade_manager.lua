@@ -1,7 +1,20 @@
----@class UpgradeSystem : Object
-UpgradeSystem = Object:extend()
+local BaseManager = require "src.managers.base_manager"
 
-function UpgradeSystem:init()
+---@class UpgradeSystem : BaseManager
+---@field activeUpgrades table<string, boolean> Currently active upgrades
+---@field upgradeStacks table<string, number> Stack counts for stackable upgrades
+---@field synergies table Active synergies
+---@field tags table<string, boolean> Upgrade tags for synergy tracking
+---@field maxStacks number Maximum allowed stacks
+---@field stackableUpgrades table<string> List of stackable upgrade IDs
+UpgradeSystem = BaseManager:extend()
+
+function UpgradeSystem:init(config)
+    config = config or {}
+    config.debug = config.debug or false
+
+    BaseManager:init("UpgradeSystem", config)
+
     -- Track active upgrades and synergies
     self.activeUpgrades = {}
     self.upgradeStacks = {} -- Track how many times each stackable upgrade has been taken

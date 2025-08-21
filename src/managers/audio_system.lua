@@ -1,13 +1,34 @@
----@class AudioSystem : Object
-AudioSystem = Object:extend()
+local BaseManager = require "src.managers.base_manager"
 
-function AudioSystem:init()
+---@class AudioSystem : BaseManager
+---@field sounds table<string, love.SoundData> Generated sound effects
+---@field volume number Master volume (0-1)
+---@field sfxVolume number SFX volume (0-1)
+---@field musicVolume number Music volume (0-1)
+---@field currentBGM love.Source? Currently playing background music
+AudioSystem = BaseManager:extend()
+
+function AudioSystem:init(config)
+    config = config or {}
+    config.debug = config.debug or false
+
+    BaseManager:init("AudioSystem", config)
+
+    -- Audio configuration
+    self.volume = self:getConfig("masterVolume", 0.7)
+    self.sfxVolume = self:getConfig("sfxVolume", 0.8)
+    self.musicVolume = self:getConfig("musicVolume", 0.5)
+    self.currentBGM = nil
+end
+
+function AudioSystem:setupDefaults()
+    -- Default sound configurations will be generated in initialize
     self.sounds = {}
-    self.volume = 0.7
-    self.sfxVolume = 0.8
-    self.musicVolume = 0.5
+end
 
-    -- Generate procedural sounds (multiple variations where useful)
+function AudioSystem:initialize()
+    BaseManager.initialize(self)
+    -- Generate procedural sounds after base initialization
     self:generateSounds()
 end
 
@@ -125,19 +146,44 @@ function AudioSystem:createNoise(duration)
     return love.audio.newSource(soundData, "static")
 end
 
+---Play a sound effect
+---@param soundName string Name of the sound to play
+---@param volume number? Volume multiplier (0-1, default 1.0)
+---@param pitch number? Pitch multiplier (default 1.0)
+---@return love.Source? source The playing sound source, or nil if sound not found
 function AudioSystem:playSound(soundName, volume, pitch)
+    if not self:isActive() then
+        self:logError("Cannot play sound: AudioSystem is not active", "warning")
+        return nil
+    end
+
     local sound = self.sounds[soundName]
-    if not sound then return end
-    
+    if not sound then
+        self:logError("Sound '" .. soundName .. "' not found", "warning")
+        return nil
+    end
+
     volume = volume or 1.0
     pitch = pitch or 1.0
-    
+
     -- Clone the source to allow multiple simultaneous plays
-    local source = sound:clone()
-    source:setVolume(volume * self.sfxVolume * self.volume)
-    source:setPitch(pitch)
-    source:play()
-    
+    local success, source = pcall(function()
+        local src = sound:clone()
+        src:setVolume(volume * self.sfxVolume * self.volume)
+        src:setPitch(pitch)
+        src:play()
+        return src
+    end)
+
+    if not success then
+        self:logError("Failed to play sound '" .. soundName .. "'", "warning")
+        return nil
+    end
+
+    if self.config.debug then
+        print("[AudioSystem] Playing sound: " .. soundName)
+    end
+
     return source
 end
 
@@ -208,16 +254,59 @@ function AudioSystem:playSynergy()
     self:playSound("synergy", 0.8, 1.0)
 end
 
+---Set master volume
+---@param volume number Volume level (0-1)
 function AudioSystem:setVolume(volume)
     self.volume = math.max(0, math.min(1, volume))
+    if self.config.debug then
+        print(string.format("[AudioSystem] Master volume set to %.2f", self.volume))
+    end
 end
 
+---Set SFX volume
+---@param volume number Volume level (0-1)
 function AudioSystem:setSFXVolume(volume)
     self.sfxVolume = math.max(0, math.min(1, volume))
+    if self.config.debug then
+        print(string.format("[AudioSystem] SFX volume set to %.2f", self.sfxVolume))
+    end
 end
 
+---Set music volume
+---@param volume number Volume level (0-1)
 function AudioSystem:setMusicVolume(volume)
     self.musicVolume = math.max(0, math.min(1, volume))
+    if self.config.debug then
+        print(string.format("[AudioSystem] Music volume set to %.2f", self.musicVolume))
+    end
+end
+
+---Get current volume settings
+---@return number master Master volume
+---@return number sfx SFX volume
+---@return number music Music volume
+function AudioSystem:getVolumeSettings()
+    return self.volume, self.sfxVolume, self.musicVolume
+end
+
+---Stop all currently playing sounds
+function AudioSystem:stopAll()
+    if not self:isActive() then return end
+
+    love.audio.stop()
+    if self.config.debug then
+        print("[AudioSystem] Stopped all sounds")
+    end
+end
+
+---Get sound names for debugging
+---@return table<string> soundNames List of available sound names
+function AudioSystem:getSoundNames()
+    local names = {}
+    for name, _ in pairs(self.sounds) do
+        table.insert(names, name)
+    end
+    return names
 end
 
 -- Update method for any time-based audio effects

@@ -1,8 +1,27 @@
----@class SaveSystem : Object
-SaveSystem = Object:extend()
+local BaseManager = require "src.managers.base_manager"
 
-function SaveSystem:init()
-    self.saveFileName = "defendthecore_save.json"
+---@class SaveManager : BaseManager
+---@field saveFileName string Save file name
+---@field defaultProfile table Default profile template
+---@field currentProfile table? Currently loaded profile
+SaveManager = BaseManager:extend()
+
+function SaveManager:init(config)
+    config = config or {}
+    config.debug = config.debug or false
+
+    BaseManager:init("SaveManager", config)
+
+    -- Save system specific configuration
+    self.saveFileName = self:getConfig("saveFileName", "defendthecore_save.json")
+    self.currentProfile = nil
+
+    -- Initialize default profile template
+    self:createDefaultProfile()
+end
+
+function SaveManager:setupDefaults()
+    -- Create default profile template
     self.defaultProfile = {
         version = "1.0",
         settings = {
@@ -18,16 +37,16 @@ function SaveSystem:init()
             credits = 500, -- start with some credits for testing purchases
             parts = 0,
             cores = 0,
-            
+
             -- Progression
             totalRuns = 0,
             bestSurvivalTime = 0,
             totalEnemiesKilled = 0,
             bossesDefeated = 0,
-            
+
             -- Permanent upgrades unlocked in hub
             permanentUpgrades = {},
-            
+
             -- Inventory items (start with empty inventory)
             inventory = {},
 
@@ -42,12 +61,16 @@ function SaveSystem:init()
     }
 end
 
-function SaveSystem:getDefaultProfile()
+function SaveManager:createDefaultProfile()
+    self:setupDefaults()
+end
+
+function SaveManager:getDefaultProfile()
     -- Return a deep copy to avoid reference issues
     return self:deepCopy(self.defaultProfile)
 end
 
-function SaveSystem:deepCopy(original)
+function SaveManager:deepCopy(original)
     local copy = {}
     for k, v in pairs(original) do
         if type(v) == "table" then
@@ -59,74 +82,97 @@ function SaveSystem:deepCopy(original)
     return copy
 end
 
-function SaveSystem:saveExists()
+function SaveManager:saveExists()
     return love.filesystem.getInfo(self.saveFileName) ~= nil
 end
 
-function SaveSystem:save(profile)
+---Save profile to file
+---@param profile table Profile to save
+---@return boolean success Whether save was successful
+---@return string? error Error message if save failed
+function SaveManager:save(profile)
     if not profile then
-        print("[SaveSystem] Warning: Attempted to save nil profile")
-        return false
+        self:logError("Attempted to save nil profile", "warning")
+        return false, "Profile is nil"
     end
-    
+
+    if not self:isActive() then
+        self:logError("Cannot save: SaveManager is not active", "warning")
+        return false, "SaveManager is not active"
+    end
+
     -- Ensure version is set
     profile.version = profile.version or "1.0"
-    
+    profile.lastSaved = os.date("%Y-%m-%d %H:%M:%S")
+
     local success, result = pcall(function()
         local json = self:encodeJSON(profile)
         return love.filesystem.write(self.saveFileName, json)
     end)
-    
+
     if success and result then
-        print("[SaveSystem] Save successful")
+        if self.config.debug then
+            print("[SaveSystem] Save successful")
+        end
         return true
     else
-        print("[SaveSystem] Save failed: " .. tostring(result))
-        return false
+        self:logError("Save failed: " .. tostring(result), "warning")
+        return false, tostring(result)
     end
 end
 
-function SaveSystem:load()
-    if not self:saveExists() then
-        print("[SaveSystem] No save file found, creating default profile")
+---Load profile from file
+---@return table profile Loaded profile or default profile if loading fails
+function SaveManager:load()
+    if not self:isActive() then
+        self:logError("Cannot load: SaveManager is not active", "warning")
         return self:getDefaultProfile()
     end
-    
+
+    if not self:saveExists() then
+        if self.config.debug then
+            print("[SaveSystem] No save file found, creating default profile")
+        end
+        return self:getDefaultProfile()
+    end
+
     local success, result = pcall(function()
         local data = love.filesystem.read(self.saveFileName)
         return self:decodeJSON(data)
     end)
-    
+
     if success and result then
         -- Validate and merge with defaults to handle version differences
         local profile = self:validateAndMergeProfile(result)
-        print("[SaveSystem] Load successful")
+        if self.config.debug then
+            print("[SaveSystem] Load successful")
+        end
         return profile
     else
-        print("[SaveSystem] Load failed: " .. tostring(result) .. ", using default profile")
+        self:logError("Load failed: " .. tostring(result) .. ", using default profile", "warning")
         return self:getDefaultProfile()
     end
 end
 
-function SaveSystem:validateAndMergeProfile(loadedProfile)
+function SaveManager:validateAndMergeProfile(loadedProfile)
     local profile = self:getDefaultProfile()
-    
+
     -- Merge loaded data with defaults (preserves new fields in updates)
     if loadedProfile.settings then
         self:mergeTable(profile.settings, loadedProfile.settings)
     end
-    
+
     if loadedProfile.player then
         self:mergeTable(profile.player, loadedProfile.player)
     end
-    
+
     -- Preserve version info
     profile.version = loadedProfile.version or "1.0"
-    
+
     return profile
 end
 
-function SaveSystem:mergeTable(target, source)
+function SaveManager:mergeTable(target, source)
     for k, v in pairs(source) do
         if type(v) == "table" and type(target[k]) == "table" then
             self:mergeTable(target[k], v)
@@ -137,7 +183,7 @@ function SaveSystem:mergeTable(target, source)
 end
 
 -- Simple JSON encoder (basic implementation)
-function SaveSystem:encodeJSON(data)
+function SaveManager:encodeJSON(data)
     if type(data) == "table" then
         local isArray = true
         local maxIndex = 0
@@ -178,10 +224,10 @@ function SaveSystem:encodeJSON(data)
 end
 
 -- Simple JSON decoder (basic implementation)
-function SaveSystem:decodeJSON(str)
+function SaveManager:decodeJSON(str)
     -- Remove whitespace
     str = str:gsub("%s+", "")
-    
+
     local function parseValue(s, pos)
         local char = s:sub(pos, pos)
         if char == "{" then
@@ -200,31 +246,31 @@ function SaveSystem:decodeJSON(str)
             return nil, pos + 4
         end
     end
-    
+
     self.parseValue = parseValue
     local result, _ = parseValue(str, 1)
     return result
 end
 
-function SaveSystem:parseObject(s, pos)
+function SaveManager:parseObject(s, pos)
     local obj = {}
     pos = pos + 1 -- skip '{'
-    
+
     if s:sub(pos, pos) == "}" then
         return obj, pos + 1
     end
-    
+
     while true do
         local key, newPos = self:parseString(s, pos)
         pos = newPos
-        
+
         -- Skip ':'
         pos = pos + 1
-        
+
         local value
         value, pos = self.parseValue(s, pos)
         obj[key] = value
-        
+
         local char = s:sub(pos, pos)
         if char == "}" then
             return obj, pos + 1
@@ -234,21 +280,21 @@ function SaveSystem:parseObject(s, pos)
     end
 end
 
-function SaveSystem:parseArray(s, pos)
+function SaveManager:parseArray(s, pos)
     local arr = {}
     pos = pos + 1 -- skip '['
-    
+
     if s:sub(pos, pos) == "]" then
         return arr, pos + 1
     end
-    
+
     local index = 1
     while true do
         local value
         value, pos = self.parseValue(s, pos)
         arr[index] = value
         index = index + 1
-        
+
         local char = s:sub(pos, pos)
         if char == "]" then
             return arr, pos + 1
@@ -258,14 +304,14 @@ function SaveSystem:parseArray(s, pos)
     end
 end
 
-function SaveSystem:parseString(s, pos)
+function SaveManager:parseString(s, pos)
     pos = pos + 1 -- skip opening '"'
     local endPos = s:find('"', pos)
     local str = s:sub(pos, endPos - 1)
     return str, endPos + 1
 end
 
-function SaveSystem:parseNumber(s, pos)
+function SaveManager:parseNumber(s, pos)
     local endPos = pos
     while endPos <= #s do
         local char = s:sub(endPos, endPos)
@@ -279,25 +325,25 @@ function SaveSystem:parseNumber(s, pos)
 end
 
 -- Utility methods for game systems
-function SaveSystem:addCredits(amount)
+function SaveManager:addCredits(amount)
     if _G.Game and _G.Game.PROFILE then
         _G.Game.PROFILE.player.credits = (_G.Game.PROFILE.player.credits or 0) + amount
     end
 end
 
-function SaveSystem:addParts(amount)
+function SaveManager:addParts(amount)
     if _G.Game and _G.Game.PROFILE then
         _G.Game.PROFILE.player.parts = (_G.Game.PROFILE.player.parts or 0) + amount
     end
 end
 
-function SaveSystem:addCores(amount)
+function SaveManager:addCores(amount)
     if _G.Game and _G.Game.PROFILE then
         _G.Game.PROFILE.player.cores = (_G.Game.PROFILE.player.cores or 0) + amount
     end
 end
 
-function SaveSystem:spendCredits(amount)
+function SaveManager:spendCredits(amount)
     if _G.Game and _G.Game.PROFILE then
         local current = _G.Game.PROFILE.player.credits or 0
         if current >= amount then
@@ -308,14 +354,14 @@ function SaveSystem:spendCredits(amount)
     return false
 end
 
-function SaveSystem:getCredits()
+function SaveManager:getCredits()
     if _G.Game and _G.Game.PROFILE then
         return _G.Game.PROFILE.player.credits or 0
     end
     return 0
 end
 
-function SaveSystem:unlockPermanentUpgrade(upgradeId)
+function SaveManager:unlockPermanentUpgrade(upgradeId)
     if _G.Game and _G.Game.PROFILE then
         local upgrades = _G.Game.PROFILE.player.permanentUpgrades
         if not upgrades[upgradeId] then
@@ -326,7 +372,7 @@ function SaveSystem:unlockPermanentUpgrade(upgradeId)
     return false
 end
 
-function SaveSystem:hasPermanentUpgrade(upgradeId)
+function SaveManager:hasPermanentUpgrade(upgradeId)
     if _G.Game and _G.Game.PROFILE then
         return _G.Game.PROFILE.player.permanentUpgrades[upgradeId] == true
     end
@@ -334,7 +380,7 @@ function SaveSystem:hasPermanentUpgrade(upgradeId)
 end
 
 -- Inventory helpers
-function SaveSystem:getInventory()
+function SaveManager:getInventory()
     if _G.Game and _G.Game.PROFILE then
         _G.Game.PROFILE.player.inventory = _G.Game.PROFILE.player.inventory or {}
         return _G.Game.PROFILE.player.inventory
@@ -342,7 +388,7 @@ function SaveSystem:getInventory()
     return {}
 end
 
-function SaveSystem:getEquippedCount()
+function SaveManager:getEquippedCount()
     local inv = self:getInventory()
     local count = 0
     for _, item in ipairs(inv) do
@@ -351,7 +397,7 @@ function SaveSystem:getEquippedCount()
     return count
 end
 
-function SaveSystem:hasItem(itemId)
+function SaveManager:hasItem(itemId)
     local inv = self:getInventory()
     for _, item in ipairs(inv) do
         if item.id == itemId then return true end
@@ -359,7 +405,7 @@ function SaveSystem:hasItem(itemId)
     return false
 end
 
-function SaveSystem:addItemById(itemId, name)
+function SaveManager:addItemById(itemId, name)
     -- Avoid duplicates: if already exists, do nothing (or extend later with stacks)
     if self:hasItem(itemId) then return false end
     local inv = self:getInventory()
@@ -367,7 +413,7 @@ function SaveSystem:addItemById(itemId, name)
     return true
 end
 
-function SaveSystem:toggleEquip(itemId, maxEquipped)
+function SaveManager:toggleEquip(itemId, maxEquipped)
     local inv = self:getInventory()
     local equippedCount = self:getEquippedCount()
     for _, item in ipairs(inv) do
@@ -388,23 +434,61 @@ function SaveSystem:toggleEquip(itemId, maxEquipped)
 end
 
 ---Delete save file and reset in-memory profile to defaults
----@return boolean ok, string|nil err
-function SaveSystem:deleteSave()
+---@return boolean success Whether deletion was successful
+---@return string? error Error message if deletion failed
+function SaveManager:deleteSave()
+    if not self:isActive() then
+        self:logError("Cannot delete: SaveManager is not active", "warning")
+        return false, "SaveManager is not active"
+    end
+
     local ok = true
     local err
     if love.filesystem.getInfo(self.saveFileName) then
         ok, err = love.filesystem.remove(self.saveFileName)
         if not ok then
-            print("[SaveSystem] Delete failed: " .. tostring(err))
+            self:logError("Delete failed: " .. tostring(err), "warning")
             return false, err
         end
     end
+
     -- Reset current profile to defaults for immediate testing
     if _G.Game then
         _G.Game.PROFILE = self:getDefaultProfile()
     end
-    print("[SaveSystem] Save deleted. Profile reset to defaults.")
+
+    if self.config.debug then
+        print("[SaveManager] Save deleted. Profile reset to defaults.")
+    end
     return true
 end
 
-return SaveSystem
+---Get current profile
+---@return table? profile Current loaded profile
+function SaveManager:getCurrentProfile()
+    return self.currentProfile
+end
+
+---Set current profile
+---@param profile table Profile to set as current
+---@return boolean success Whether setting was successful
+function SaveManager:setCurrentProfile(profile)
+    if not profile then
+        self:logError("Cannot set nil profile", "warning")
+        return false
+    end
+    self.currentProfile = profile
+    return true
+end
+
+---Reset profile to defaults
+---@return table newProfile New default profile
+function SaveManager:resetProfile()
+    self.currentProfile = self:getDefaultProfile()
+    if self.config.debug then
+        print("[SaveManager] Profile reset to defaults")
+    end
+    return self.currentProfile
+end
+
+return SaveManager
