@@ -1,6 +1,6 @@
 require "src.ECS.components.ui"
 require "src.ECS.components.transformable"
-local ResourceSpawner = require "src.systems.resource_spawner"
+local ResourceSpawner = require "src.managers.resource_spawner"
 
 ---@class EndlessGameState : Object
 local EndlessGameState = Object:extend()
@@ -80,7 +80,7 @@ function EndlessGameState:enter()
         _G.Game.PROFILE.player.totalRuns = (_G.Game.PROFILE.player.totalRuns or 0) + 1
     end
 end
-
+--TODO: Big problem right here, have no run saving this exists onEscape
 function EndlessGameState:exit()
     if self.ui then self.ui:destroy() end
 end
@@ -128,11 +128,12 @@ function EndlessGameState:update(dt)
     if dx~=0 or dy~=0 then local len=math.sqrt(dx*dx+dy*dy); dx,dy=dx/len,dy/len end
 
     -- Calculate current speed with upgrades
+    --TODO: define upgrade system and if even needed may even need to be extracted from here
     local currentSpeed = self.player.baseSpeed
-    if self.upgradeSystem then
-        local speedStacks = self.upgradeSystem.upgradeStacks["movement_speed"] or 0
-        currentSpeed = currentSpeed * (1.15 ^ speedStacks) -- 15% per stack, multiplicative
-    end
+    -- if self.upgradeSystem then
+    --     local speedStacks = self.upgradeSystem.upgradeStacks["movement_speed"] or 0
+    --     currentSpeed = currentSpeed * (1.15 ^ speedStacks) -- 15% per stack, multiplicative
+    -- end
     self.player.speed = currentSpeed
 
     self.player.x = clamp(self.player.x + dx*self.player.speed*dt, self.player.r, w-self.player.r)
@@ -155,21 +156,22 @@ function EndlessGameState:update(dt)
         local currentProjectileSpeed = self.weaponStats.projectileSpeed
         local currentFireRate = self.weaponStats.fireRate
 
-        if self.upgradeSystem then
-            local damageStacks = self.upgradeSystem.upgradeStacks["damage_boost"] or 0
-            local speedStacks = self.upgradeSystem.upgradeStacks["projectile_speed"] or 0
-            local fireRateStacks = self.upgradeSystem.upgradeStacks["fire_rate"] or 0
+        --TODO: same upgrade system problem
+        -- if self.upgradeSystem then
+        --     local damageStacks = self.upgradeSystem.upgradeStacks["damage_boost"] or 0
+        --     local speedStacks = self.upgradeSystem.upgradeStacks["projectile_speed"] or 0
+        --     local fireRateStacks = self.upgradeSystem.upgradeStacks["fire_rate"] or 0
 
-            currentDamage = currentDamage + damageStacks -- +1 damage per stack
-            currentProjectileSpeed = currentProjectileSpeed * (1.2 ^ speedStacks) -- 20% per stack
-            currentFireRate = currentFireRate * (1.15 ^ fireRateStacks) -- 15% per stack
-        end
+        --     currentDamage = currentDamage + damageStacks -- +1 damage per stack
+        --     currentProjectileSpeed = currentProjectileSpeed * (1.2 ^ speedStacks) -- 20% per stack
+        --     currentFireRate = currentFireRate * (1.15 ^ fireRateStacks) -- 15% per stack
+        -- end
 
         table.insert(self.bullets, {x=self.player.x, y=self.player.y, vx=math.cos(ang)*currentProjectileSpeed, vy=math.sin(ang)*currentProjectileSpeed, r=4, dmg=currentDamage})
         self.player.shootT = self.player.shootCd / currentFireRate
     end
 
-    -- Wave progression
+    -- Wave progression --TODO: should be seperated into wave system no? 
     self.wave.time = self.wave.time + dt
     if self.wave.time >= self.wave.duration then
         self.wave.number = self.wave.number + 1
@@ -205,22 +207,27 @@ function EndlessGameState:update(dt)
     end
 
     -- Update bullets
-    for i=#self.bullets,1,-1 do local b=self.bullets[i]
+    for i=#self.bullets,1,-1 do 
+        local b=self.bullets[i]
         b.x = b.x + b.vx*dt; b.y = b.y + b.vy*dt
         if b.x<-50 or b.x>w+50 or b.y<-50 or b.y>h+50 then table.remove(self.bullets,i) end
     end
 
     -- Update enemies and collisions
-    for ei=#self.enemies,1,-1 do local e=self.enemies[ei]
+    for ei=#self.enemies,1,-1 do
+        local e=self.enemies[ei]
         local ang = math.atan2(self.player.y - e.y, self.player.x - e.x)
         e.x = e.x + math.cos(ang)*e.speed*dt; e.y = e.y + math.sin(ang)*e.speed*dt
         -- Bullet hits
         local removeEnemy=false
-        for bi=#self.bullets,1,-1 do local b=self.bullets[bi]
+        for bi=#self.bullets,1,-1 do 
+            local b=self.bullets[bi]
             if dist2(e.x,e.y,b.x,b.y) < (e.r+b.r)*(e.r+b.r) then
                 e.hp = e.hp - (b.dmg or 1)
                 table.remove(self.bullets,bi)
-                if e.hp <= 0 then removeEnemy=true; break end
+                if e.hp <= 0 then 
+                    removeEnemy=true; break 
+                end
             end
         end
         if removeEnemy then
@@ -242,7 +249,7 @@ function EndlessGameState:update(dt)
         ::continue::
     end
 
-    -- Update resource spawner
+    -- Update resource spawner --TODO: Check for simplification / rework / put in func
     self.resourceSpawner:update(dt, self.player.hp, self.player.maxHp)
 
     -- Check for core spawn
@@ -277,10 +284,6 @@ function EndlessGameState:update(dt)
 
     -- Update toast manager
     self.toastManager:update(dt)
-
-    -- No upgrade UI in endless mode
-
-    -- Upgrades are only available in the command hub, not during endless runs
 
     -- Timer
     self.timeSurvived = self.timeSurvived + dt
@@ -337,8 +340,7 @@ function EndlessGameState:draw()
         self.toastManager:draw()
     end
 
-    -- No upgrade UI in endless mode - upgrades are only available in the command hub
-
+    -- Background?
     love.graphics.setColor(1,1,1,1)
 end
 
@@ -370,7 +372,7 @@ function EndlessGameState:buildLayout(w, h)
         text="Exit to Hub", fontSize=18, textColor=self.colors.text,
         background={ color=self.colors.button, drawMode="fill" }, callbackName="endless:backToHub",
         hoverCallbackName="endless:buttonHover", pressCallbackName="endless:buttonPress", releaseCallbackName="endless:buttonRelease",
-        zIndex=2, isFocusable=true })
+        zIndex=2, isFocusable=false })
     self.ui:addElement(self.btnBack)
     -- Initial focus - use focusableElements array
     if #self.ui.focusableElements > 0 then
@@ -381,8 +383,6 @@ end
 function EndlessGameState:layout(w, h)
     if self.btnBack then self.btnBack:setPosition(24, h-24); self.btnBack:setSize(220, 42) end
 end
-
--- Upgrades are only available in the command hub, not during endless runs
 
 return EndlessGameState
 

@@ -17,7 +17,7 @@ function love.load()
     love.math.setRandomSeed(_G.Game.SEED)
 
     -- Initialize save system and load profile
-    local SaveSystem = require("src.systems.save_system")
+    local SaveSystem = require("src.managers.save_system")
     _G.Game.SaveSystem = SaveSystem()
     _G.Game.PROFILE = _G.Game.SaveSystem:load()
 

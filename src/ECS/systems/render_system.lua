@@ -7,11 +7,11 @@ function RenderSystem:init()
 	self:requireAll("transform")
 
 	-- Initialize shader manager
-	local ShaderManager = require "src.systems.shader_manager"
+	local ShaderManager = require "src.managers.shader_manager"
 	self.shaderManager = ShaderManager()
 
 	-- Initialize particle system
-	local ParticleSystem = require "src.systems.particle_system"
+	local ParticleSystem = require "src.ECS.systems.particle_system"
 	self.particleSystem = ParticleSystem()
 
 	-- Time tracking for animations

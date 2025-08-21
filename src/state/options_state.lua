@@ -42,7 +42,13 @@ function OptionsState:update(dt)
 end
 
 function OptionsState:draw()
-    if self.ui then self.ui:draw() end
+    -- First draw the background
+    love.graphics.clear(0.06, 0.07, 0.10, 1)
+
+    -- Then draw the UI
+    if self.ui then
+        self.ui:draw()
+    end
 end
 
 function OptionsState:resize(w, h)
@@ -106,7 +112,7 @@ function OptionsState:buildLayout(w, h)
         x = w * 0.5 + 80, y = h * 0.28,
         width = 100, height = 40,
         pivotX = 0, pivotY = 0.5,
-        text = (_G.Game.SETTINGS.showFPS ~= false) and "ON" or "OFF",
+        text = _G.Game.SETTINGS.showFPS and "ON" or "OFF",
         fontSize = 18,
         textColor = self.colors.text,
         background = { color = self.colors.button, drawMode = "fill" },
@@ -115,17 +121,14 @@ function OptionsState:buildLayout(w, h)
         pressCallbackName = "options:buttonPress",
         releaseCallbackName = "options:buttonRelease",
         zIndex = 2,
-        isFocusable = true,
-        onDraw = function(el)
-            -- no-op
-        end
+        isFocusable = true
     })
     self.ui:addElement(fpsBtn)
 
     local cm = _G.Game.CallbackManager
     cm:register("options:toggleFPS", function(el)
-        _G.Game.SETTINGS.showFPS = not (_G.Game.SETTINGS.showFPS == false)
-        el.text = (_G.Game.SETTINGS.showFPS ~= false) and "ON" or "OFF"
+        _G.Game.SETTINGS.showFPS = not _G.Game.SETTINGS.showFPS
+        el.text = _G.Game.SETTINGS.showFPS and "ON" or "OFF"
     end)
 
     -- Back

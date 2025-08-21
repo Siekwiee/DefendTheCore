@@ -49,10 +49,6 @@ function MainMenuState:draw()
     if self.ui then
         self.ui:draw()
     end
-    if _G.Game and _G.Game.DEBUG then
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.print("FPS: " .. tostring(love.timer.getFPS()), 10, 10)
-    end
     -- Version bottom-left
     love.graphics.setColor(1, 1, 1, 0.6)
     love.graphics.print("v" .. tostring(_G.Game.VERSION), 10, love.graphics.getHeight() - 24)
@@ -378,8 +374,8 @@ function MainMenuState:openOptions()
     end)
 
     cm:register("menu:toggleFPS", function(button)
-        _G.Game.SETTINGS.showFPS = not (_G.Game.SETTINGS.showFPS == false)
-        button.text = (_G.Game.SETTINGS.showFPS ~= false) and "ON" or "OFF"
+        _G.Game.SETTINGS.showFPS = not _G.Game.SETTINGS.showFPS
+        button.text = _G.Game.SETTINGS.showFPS and "ON" or "OFF"
     end)
 
     -- Sliders adjust on Left/Right keys when focused

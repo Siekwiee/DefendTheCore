@@ -16,7 +16,7 @@ function CollisionSystem:init()
 	self.audioSystem = nil  -- Will be set by the world/run state
 
 	-- Initialize damage system
-	local DamageSystem = require "src.systems.damage_system"
+	local DamageSystem = require "src.ECS.systems.damage_system"
 	self.damageSystem = DamageSystem()
 end
 

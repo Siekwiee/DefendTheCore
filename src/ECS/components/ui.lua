@@ -137,6 +137,7 @@ function UIBox:removeElement(element)
     end
 end
 
+---Clear all elements from this UIBox
 function UIBox:clear()
     self.elements = {}
     self.focusableElements = {}
@@ -274,12 +275,7 @@ function UIBox:getElementByName(elementName)
     return nil
 end
 
----Remove all elements from this box
-function UIBox:clear()
-    self.elements = {}
-    self.focusedIndex = nil
-    self.tooltipElement = nil
-end
+
 
 ---Set focus by element index in focusableElements array
 ---@param index integer
@@ -433,13 +429,15 @@ function UIElement:init(properties)
     -- Basic properties
     self.elementName = properties and properties.elementName or "DefaultElementName"
     self.zIndex = properties and properties.zIndex or 0
-    self.visible = properties and properties.visible ~= nil and properties.visible or true
+    self.visible = properties and (properties.visible ~= nil) and properties.visible or true
     
     -- Visual properties
     self.color = properties and properties.color or {1, 1, 1, 1}
     self.drawMode = properties and properties.drawMode or "fill" -- "fill" or "line"
     self.text = properties and properties.text
-    self.background = properties and properties.background or _G.Game.CONSTANTS.UI.DEFAULT_BACKGROUND
+    self.background = properties and properties.background or
+                      (_G.Game and _G.Game.CONSTANTS and _G.Game.CONSTANTS.UI and _G.Game.CONSTANTS.UI.DEFAULT_BACKGROUND) or
+                      { color = {0, 0, 0, 0}, drawMode = "none" }
     
     -- Font handling - create font from size if provided, otherwise use provided font or default
     if properties and properties.fontSize then
