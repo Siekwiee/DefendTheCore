@@ -5,15 +5,15 @@ CollisionSystem = System:extend("CollisionSystem")
 local function dist2(ax, ay, bx, by)
 	local dx = ax - bx
 	local dy = ay - by
-	return dx*dx + dy*dy
+	return dx * dx + dy * dy
 end
 
 function CollisionSystem:init()
 	System.init(self)
 	self:requireAll("transform", "circle_collider")
-	self.shaderManager = nil  -- Will be set by the world/run state
-	self.particleSystem = nil  -- Will be set by the world/run state
-	self.audioSystem = nil  -- Will be set by the world/run state
+	self.shaderManager = nil -- Will be set by the world/run state
+	self.particleSystem = nil -- Will be set by the world/run state
+	self.audioSystem = nil -- Will be set by the world/run state
 
 	-- Initialize damage system
 	local DamageSystem = require "src.ECS.systems.damage_system"
@@ -160,7 +160,7 @@ function CollisionSystem:update(dt)
 				if t then
 					-- Death particles
 					if self.particleSystem then
-						local intensity = math.min(2.0, (c.maxHp or 1) / 5)  -- Scale with enemy size
+						local intensity = math.min(2.0, (c.maxHp or 1) / 5) -- Scale with enemy size
 						self.particleSystem:death(t.x, t.y, intensity)
 					end
 
@@ -177,12 +177,13 @@ function CollisionSystem:update(dt)
 end
 
 function CollisionSystem._withinArc(dirDeg, centerDeg, arcDeg)
-    local function norm(a)
-        while a > 180 do a = a - 360 end
-        while a < -180 do a = a + 360 end
-        return a
-    end
-    local delta = norm(dirDeg - centerDeg)
-    return math.abs(delta) <= (arcDeg * 0.5)
+	local function norm(a)
+		while a > 180 do a = a - 360 end
+		while a < -180 do a = a + 360 end
+		return a
+	end
+	local delta = norm(dirDeg - centerDeg)
+	return math.abs(delta) <= (arcDeg * 0.5)
 end
+
 return CollisionSystem

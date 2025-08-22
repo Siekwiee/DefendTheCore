@@ -4,8 +4,8 @@ setlocal
 rem ───────────────────────────────────────────────────────────────
 rem CONFIGURATION
 rem ───────────────────────────────────────────────────────────────
-set "PROJECT_DIR=C:\Users\bruce\Documents\Dev\DefendTheCore"
-set "LOVE_DIR=C:\Program Files\LOVE"
+set "PROJECT_DIR=C:\Users\Jannik.Wiest\Documents\DEV\AA_LEARNING\prv\LUA\DefendTheCore"
+set "LOVE_DIR=C:\Users\Jannik.Wiest\Documents\DEV\AA_LEARNING\prv\LUA\love-src"
 set "BUILD_DIR=%PROJECT_DIR%\build"
 set "APP_NAME=DefendTheCore"
 

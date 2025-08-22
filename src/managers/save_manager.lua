@@ -44,7 +44,7 @@ function SaveManager:setupDefaults()
             totalEnemiesKilled = 0,
             bossesDefeated = 0,
 
-            -- Permanent upgrades unlocked in hub
+            -- Permanent upgrades with levels (0 = not purchased, 1+ = level)
             permanentUpgrades = {},
 
             -- Inventory items (start with empty inventory)
@@ -194,7 +194,7 @@ function SaveManager:encodeJSON(data)
             end
             maxIndex = math.max(maxIndex, k)
         end
-        
+
         if isArray then
             local result = "["
             for i = 1, maxIndex do
@@ -364,17 +364,46 @@ end
 function SaveManager:unlockPermanentUpgrade(upgradeId)
     if _G.Game and _G.Game.PROFILE then
         local upgrades = _G.Game.PROFILE.player.permanentUpgrades
-        if not upgrades[upgradeId] then
-            upgrades[upgradeId] = true
-            return true
-        end
+        local currentLevel = upgrades[upgradeId] or 0
+        upgrades[upgradeId] = currentLevel + 1
+        return true
     end
     return false
 end
 
 function SaveManager:hasPermanentUpgrade(upgradeId)
     if _G.Game and _G.Game.PROFILE then
-        return _G.Game.PROFILE.player.permanentUpgrades[upgradeId] == true
+        local level = _G.Game.PROFILE.player.permanentUpgrades[upgradeId] or 0
+        return level > 0
+    end
+    return false
+end
+
+function SaveManager:getPermanentUpgradeLevel(upgradeId)
+    if _G.Game and _G.Game.PROFILE then
+        local level = _G.Game.PROFILE.player.permanentUpgrades[upgradeId]
+        -- Handle legacy boolean values from old save format
+        if level == true then
+            -- Convert old boolean format to level 1 and update the save
+            _G.Game.PROFILE.player.permanentUpgrades[upgradeId] = 1
+            -- Save the updated profile to migrate old format
+            if _G.Game.PROFILE then
+                self:save(_G.Game.PROFILE)
+            end
+            return 1
+        elseif level == false or level == nil then
+            return 0
+        else
+            return level
+        end
+    end
+    return 0
+end
+
+function SaveManager:canUpgrade(upgradeId, maxLevel)
+    if _G.Game and _G.Game.PROFILE then
+        local currentLevel = self:getPermanentUpgradeLevel(upgradeId)
+        return currentLevel < maxLevel
     end
     return false
 end

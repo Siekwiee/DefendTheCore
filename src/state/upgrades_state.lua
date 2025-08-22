@@ -7,17 +7,17 @@ function UpgradesState:init()
     self.name = "Upgrades"
 
     self.colors = {
-        bg = {0.06, 0.07, 0.10, 1},
-        title = {1, 1, 1, 1},
-        panel = {0.09, 0.10, 0.14, 1},
-        card = {0.14, 0.16, 0.22, 1},
-        cardHover = {0.18, 0.20, 0.28, 1},
-        cardPress = {0.12, 0.14, 0.20, 1},
-        text = {1, 1, 1, 1},
-        muted = {0.8, 0.85, 0.9, 1},
-        button = {0.15, 0.17, 0.22, 1},
-        buttonHover = {0.22, 0.25, 0.32, 1},
-        buttonPress = {0.10, 0.12, 0.16, 1},
+        bg = { 0.06, 0.07, 0.10, 1 },
+        title = { 1, 1, 1, 1 },
+        panel = { 0.09, 0.10, 0.14, 1 },
+        card = { 0.14, 0.16, 0.22, 1 },
+        cardHover = { 0.18, 0.20, 0.28, 1 },
+        cardPress = { 0.12, 0.14, 0.20, 1 },
+        text = { 1, 1, 1, 1 },
+        muted = { 0.8, 0.85, 0.9, 1 },
+        button = { 0.15, 0.17, 0.22, 1 },
+        buttonHover = { 0.22, 0.25, 0.32, 1 },
+        buttonPress = { 0.10, 0.12, 0.16, 1 },
     }
 
     -- Load definitions from external data file
@@ -107,18 +107,30 @@ function UpgradesState:registerCallbacks()
         if not id then return end
         local defs = self.upgradeDefs
         local def
-        for _, d in ipairs(defs) do if d.id == id then def = d break end end
+        for _, d in ipairs(defs) do
+            if d.id == id then
+                def = d
+                break
+            end
+        end
         if not def then return end
 
         local save = _G.Game.SaveSystem
-        if save:hasPermanentUpgrade(id) then
-            print("Already unlocked: " .. id)
+        local currentLevel = save:getPermanentUpgradeLevel(id)
+
+        -- Check if already at max level
+        if currentLevel >= def.maxLevel then
+            print("Already at max level: " .. id .. " (" .. currentLevel .. "/" .. def.maxLevel .. ")")
             return
         end
-        local cost = def.cost or 0
+
+        -- Calculate cost for next level (exponential scaling)
+        local cost = math.floor(def.baseCost * (def.costMultiplier ^ currentLevel))
+
         if save:spendCredits(cost) then
             if save:unlockPermanentUpgrade(id) then
-                print("Unlocked upgrade: " .. id .. " for " .. tostring(cost) .. " credits")
+                local newLevel = save:getPermanentUpgradeLevel(id)
+                print("Upgraded " .. id .. " to level " .. newLevel .. " for " .. tostring(cost) .. " credits")
                 if _G.Game.PROFILE then save:save(_G.Game.PROFILE) end
                 -- Update card text/state
                 self:updateCardElement(element, def)
@@ -131,18 +143,43 @@ end
 
 function UpgradesState:updateCardElement(card, def)
     local save = _G.Game.SaveSystem
-    local unlocked = save:hasPermanentUpgrade(def.id)
-    local status = unlocked and "Unlocked" or ("Cost: " .. tostring(def.cost))
+    local currentLevel = save:getPermanentUpgradeLevel(def.id)
+    local maxed = currentLevel >= def.maxLevel
+
+    local status
+    if maxed then
+        status = "MAX LEVEL (" .. currentLevel .. "/" .. def.maxLevel .. ")"
+    elseif currentLevel == 0 then
+        local cost = def.baseCost
+        status = "Cost: " .. tostring(cost) .. " credits"
+    else
+        local nextCost = math.floor(def.baseCost * (def.costMultiplier ^ currentLevel))
+        status = "Level " .. currentLevel .. "/" .. def.maxLevel .. "\nNext: " .. tostring(nextCost) .. " credits"
+    end
+
     card.text = def.title .. "\n\n" .. def.desc .. "\n\n" .. status
-    card.baseColor = unlocked and {0.12, 0.18, 0.14, 1} or self.colors.card
+
+    -- Color coding based on level
+    if maxed then
+        card.baseColor = { 0.18, 0.25, 0.18, 1 } -- Dark green for maxed
+    elseif currentLevel > 0 then
+        card.baseColor = { 0.15, 0.20, 0.25, 1 } -- Blue-ish for partially upgraded
+    else
+        card.baseColor = self.colors.card        -- Default for not purchased
+    end
+
     card.background.color = card.baseColor
 end
 
 function UpgradesState:createCard(def, x, y, w, h)
     local card = UIElement({
-        elementName = "upg_card_"..def.id,
-        x = x, y = y, width = w, height = h,
-        pivotX = 0.5, pivotY = 0.5,
+        elementName = "upg_card_" .. def.id,
+        x = x,
+        y = y,
+        width = w,
+        height = h,
+        pivotX = 0.5,
+        pivotY = 0.5,
         text = "", -- set below
         fontSize = 18,
         textColor = self.colors.text,
@@ -170,13 +207,16 @@ function UpgradesState:buildLayout(w, h)
     -- Title
     self.title = UIElement({
         elementName = "upgrades_title",
-        x = w * 0.5, y = h * 0.12,
-        width = math.min(1100, w * 0.9), height = 64,
-        pivotX = 0.5, pivotY = 0.5,
+        x = w * 0.5,
+        y = h * 0.12,
+        width = math.min(1100, w * 0.9),
+        height = 64,
+        pivotX = 0.5,
+        pivotY = 0.5,
         text = "Permanent Upgrades",
         fontSize = 42,
         textColor = self.colors.title,
-        background = { color = {0,0,0,0}, drawMode = "none" },
+        background = { color = { 0, 0, 0, 0 }, drawMode = "none" },
         zIndex = 1,
     })
     self.ui:addElement(self.title)
@@ -193,13 +233,13 @@ function UpgradesState:buildLayout(w, h)
     local startY = h * 0.24 + cardH * 0.5
 
     local i = 1
-    for r=1,rows do
-        for c=1,cols do
+    for r = 1, rows do
+        for c = 1, cols do
             local def = self.upgradeDefs[i]
             if not def then break end
             self:createCard(def,
-                startX + (c-1)*(cardW + spacing),
-                startY + (r-1)*(cardH + spacing),
+                startX + (c - 1) * (cardW + spacing),
+                startY + (r - 1) * (cardH + spacing),
                 cardW, cardH)
             i = i + 1
         end
@@ -208,9 +248,12 @@ function UpgradesState:buildLayout(w, h)
     -- Back button
     self.btnBack = UIElement({
         elementName = "upgrades_back",
-        x = 24, y = h - 24,
-        width = 160, height = 42,
-        pivotX = 0, pivotY = 1,
+        x = 24,
+        y = h - 24,
+        width = 160,
+        height = 42,
+        pivotX = 0,
+        pivotY = 1,
         text = "Back",
         fontSize = 18,
         textColor = self.colors.text,
@@ -234,7 +277,10 @@ function UpgradesState:buildLayout(w, h)
         if el.elementName and el.elementName:match("^upg_card_") then
             local id = el.elementName:gsub("upg_card_", "")
             for _, def in ipairs(self.upgradeDefs) do
-                if def.id == id then self:updateCardElement(el, def) break end
+                if def.id == id then
+                    self:updateCardElement(el, def)
+                    break
+                end
             end
         end
     end
@@ -250,4 +296,3 @@ function UpgradesState:layout(w, h)
 end
 
 return UpgradesState
-

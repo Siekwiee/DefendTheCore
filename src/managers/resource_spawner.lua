@@ -29,84 +29,84 @@ function ResourceSpawner:setupDefaults()
     -- Item type definitions
     self.itemTypes = {
         credits = {
-            color = {1, 1, 0.3, 1}, -- Yellow
+            color = { 1, 1, 0.3, 1 }, -- Yellow
             radius = 6,
             lifetime = 30,
-            valueRange = {5, 15},
+            valueRange = { 5, 15 },
             hasGlow = false,
             autoPickup = true,
             description = "Currency for purchases"
         },
         parts = {
-            color = {0.3, 0.8, 1, 1}, -- Blue
+            color = { 0.3, 0.8, 1, 1 }, -- Blue
             radius = 10,
             lifetime = 45,
-            valueRange = {1, 1},
+            valueRange = { 1, 1 },
             hasGlow = true,
             autoPickup = true,
             description = "Rare crafting materials"
         },
         cores = {
-            color = {1, 0.3, 1, 1}, -- Magenta
+            color = { 1, 0.3, 1, 1 }, -- Magenta
             radius = 12,
             lifetime = 60,
-            valueRange = {1, 1},
+            valueRange = { 1, 1 },
             hasGlow = true,
             autoPickup = true,
             description = "Ultra-rare progression items"
         },
         health = {
-            color = {0.3, 1, 0.3, 1}, -- Green
+            color = { 0.3, 1, 0.3, 1 }, -- Green
             radius = 8,
             lifetime = 20,
-            valueRange = {50, 70},
+            valueRange = { 50, 70 },
             hasGlow = true,
             autoPickup = true,
             description = "Restores player health"
         },
         inventory_item = {
-            color = {0.8, 0.3, 1, 1}, -- Purple
+            color = { 0.8, 0.3, 1, 1 }, -- Purple
             radius = 9,
             lifetime = 60,
-            valueRange = {1, 1},
+            valueRange = { 1, 1 },
             hasGlow = true,
             autoPickup = false, -- Require manual pickup for equipment
             description = "Equipment upgrade"
         },
         brown_box = {
-            color = {0.6, 0.4, 0.2, 1}, -- Brown
+            color = { 0.6, 0.4, 0.2, 1 }, -- Brown
             radius = 10,
             lifetime = 45,
-            valueRange = {1, 1},
+            valueRange = { 1, 1 },
             hasGlow = true,
             autoPickup = true,
             description = "Mystery box with random loot"
         }
     }
-    
+
     -- Spawn probability settings
     self.spawnRates = {
         onEnemyDeath = {
-            credits = 0.15,    -- 15% chance
-            parts = 0.03,      -- 3% chance
-            health = 0.08,     -- 8% chance (conditional on low health)
+            credits = 0.15,         -- 15% chance
+            parts = 0.03,           -- 3% chance
+            health = 0.08,          -- 8% chance (conditional on low health)
             inventory_item = 0.005, -- 0.5% chance
-            brown_box = 0.03   -- 3% chance for brown box (rare but rewarding)
+            brown_box = 0.03        -- 3% chance for brown box (rare but rewarding)
         }
     }
 
     -- Configurable loot table for brown boxes (focused on equipment)
     self.brownBoxLootTable = {
-        {type = "inventory_item", weight = 60}, -- Primary reward: equipment items
-        {type = "credits", weight = 20, valueRange = {25, 50}}, -- Reduced weight, higher value
-        {type = "parts", weight = 10, valueRange = {2, 4}}, -- Reduced weight, higher value
-        {type = "cores", weight = 10, valueRange = {1, 2}}, -- Increased weight and value
+        { type = "inventory_item", weight = 60 },                          -- Primary reward: equipment items
+        { type = "credits",        weight = 20, valueRange = { 25, 50 } }, -- Reduced weight, higher value
+        { type = "parts",          weight = 10, valueRange = { 2, 4 } },   -- Reduced weight, higher value
+        { type = "cores",          weight = 10, valueRange = { 1, 2 } },   -- Increased weight and value
         -- Easy to add more items here
         -- {type = "new_item", weight = 5, valueRange = {1, 3}},
     }
 
     -- Configurable duplicate conversion settings
-    self.duplicateItemCreditValue = 50 -- Credits given for duplicate items from brown boxes
+    self.duplicateItemCreditValue = 50       -- Credits given for duplicate items from brown boxes
     self.duplicateDirectItemCreditValue = 30 -- Credits given for duplicate direct item drops
 end
 
@@ -143,10 +143,11 @@ function ResourceSpawner:spawnItem(itemType, x, y, customValue)
         print("Warning: Unknown item type: " .. tostring(itemType))
         return
     end
-    
+
     local item = {
         type = itemType,
-        x = x, y = y,
+        x = x,
+        y = y,
         r = typeDef.radius,
         color = typeDef.color,
         lifetime = typeDef.lifetime,
@@ -155,13 +156,13 @@ function ResourceSpawner:spawnItem(itemType, x, y, customValue)
         autoPickup = typeDef.autoPickup,
         value = customValue or love.math.random(typeDef.valueRange[1], typeDef.valueRange[2])
     }
-    
+
     -- Special handling for inventory items
     if itemType == "inventory_item" then
         local itemPool = require("src.data.items")
         item.itemData = itemPool[love.math.random(#itemPool)]
     end
-    
+
     table.insert(self.items, item)
     return item
 end
@@ -212,14 +213,14 @@ function ResourceSpawner:findSafeSpawnPosition(playerX, playerY, screenWidth, sc
     minDistance = minDistance or 100
     local attempts = 0
     local x, y
-    
+
     repeat
         x = love.math.random(50, screenWidth - 50)
         y = love.math.random(50, screenHeight - 50)
         attempts = attempts + 1
-        local distance = math.sqrt((x - playerX)^2 + (y - playerY)^2)
+        local distance = math.sqrt((x - playerX) ^ 2 + (y - playerY) ^ 2)
     until distance > minDistance or attempts > 10
-    
+
     return x, y
 end
 
@@ -251,47 +252,52 @@ end
 
 function ResourceSpawner:checkItemCollision(playerX, playerY, playerRadius)
     local collectedItems = {}
-    
+
+    -- Calculate pickup range with upgrades
+    local basePickupRange = 5
+    if _G.Game.SaveSystem then
+        local rangeLevel = _G.Game.SaveSystem:getPermanentUpgradeLevel("rng")
+        if rangeLevel > 0 then
+            basePickupRange = basePickupRange + (15 * rangeLevel) -- +15 range per level
+        end
+    end
+
     for i = #self.items, 1, -1 do
         local item = self.items[i]
-        local pickupRadius = item.r + playerRadius + 5 -- Extra pickup range
-        local distance = math.sqrt((item.x - playerX)^2 + (item.y - playerY)^2)
-        
+        local pickupRadius = item.r + playerRadius + basePickupRange -- Extra pickup range with upgrades
+        local distance = math.sqrt((item.x - playerX) ^ 2 + (item.y - playerY) ^ 2)
+
         if distance < pickupRadius then
             table.insert(collectedItems, item)
             table.remove(self.items, i)
         end
     end
-    
+
     return collectedItems
 end
 
 function ResourceSpawner:collectItem(item)
     local profile = _G.Game.PROFILE
     if not profile then return false end
-    
+
     local result = { success = false, message = "", value = item.value }
-    
+
     if item.type == "credits" then
         _G.Game.SaveSystem:addCredits(item.value)
         result.success = true
         result.message = string.format("Collected %d credits!", item.value)
-        
     elseif item.type == "parts" then
         _G.Game.SaveSystem:addParts(item.value)
         result.success = true
         result.message = string.format("Collected %d parts!", item.value)
-        
     elseif item.type == "cores" then
         _G.Game.SaveSystem:addCores(item.value)
         result.success = true
         result.message = string.format("Collected %d cores!", item.value)
-        
     elseif item.type == "health" then
         result.success = true
         result.message = string.format("Restored %d health!", item.value)
         result.healthRestore = item.value
-        
     elseif item.type == "inventory_item" and item.itemData then
         local added = _G.Game.SaveSystem:addItemById(item.itemData.id, item.itemData.name)
         if added then
@@ -302,10 +308,10 @@ function ResourceSpawner:collectItem(item)
             -- Convert duplicate to credits using configurable amount
             _G.Game.SaveSystem:addCredits(self.duplicateDirectItemCreditValue)
             result.success = true
-            result.message = string.format("Already have %s, got %d credits instead!", item.itemData.name, self.duplicateDirectItemCreditValue)
+            result.message = string.format("Already have %s, got %d credits instead!", item.itemData.name,
+                self.duplicateDirectItemCreditValue)
             result.value = self.duplicateDirectItemCreditValue
         end
-
     elseif item.type == "brown_box" then
         -- Roll for random loot from brown box
         local lootType, lootValue = self:rollBrownBoxLoot()
@@ -337,43 +343,44 @@ function ResourceSpawner:collectItem(item)
                 -- Convert duplicate to credits using configurable amount
                 _G.Game.SaveSystem:addCredits(self.duplicateItemCreditValue)
                 result.success = true
-                result.message = string.format("Brown box had %s (duplicate), got %d credits instead!", randomItem.name, self.duplicateItemCreditValue)
+                result.message = string.format("Brown box had %s (duplicate), got %d credits instead!", randomItem.name,
+                    self.duplicateItemCreditValue)
                 result.value = self.duplicateItemCreditValue
             end
         end
     end
-    
+
     -- Play pickup sound
     if result.success and _G.Game.AudioSystem then
         _G.Game.AudioSystem:playUpgrade()
     end
-    
+
     -- Save progress
     if result.success and profile then
         _G.Game.SaveSystem:save(profile)
     end
-    
+
     return result
 end
 
 function ResourceSpawner:draw()
     for _, item in ipairs(self.items) do
         love.graphics.setColor(item.color)
-        
+
         -- Bobbing effect
         local bobOffset = math.sin(item.bobTime) * 2
         local drawY = item.y + bobOffset
-        
+
         -- Draw glow effect for valuable items
         if item.hasGlow then
             love.graphics.setColor(item.color[1], item.color[2], item.color[3], 0.3)
             love.graphics.circle("fill", item.x, drawY, item.r + 3)
             love.graphics.setColor(item.color)
         end
-        
+
         -- Draw main item
         love.graphics.circle("fill", item.x, drawY, item.r)
-        
+
         -- Draw pickup indicator for manual pickup items
         if not item.autoPickup then
             love.graphics.setColor(1, 1, 1, 0.8)
